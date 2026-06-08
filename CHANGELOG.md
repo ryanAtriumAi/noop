@@ -17,6 +17,21 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 1.10 — WHOOP 5/MG bonding on Android + Health Monitor fix
+
+- **Fixed (Android, WHOOP 5/MG): the strap connecting but never bonding.** It wrote `CLIENT_HELLO`
+  unacknowledged (`WRITE_TYPE_NO_RESPONSE`), which never triggered the just-works bond the `fd4b` strap
+  needs — so it sat connected, unbonded, and silent (the strap won't even stream the standard `0x2A37`
+  HR on an unauthenticated link). `CLIENT_HELLO` is now a confirmed write that triggers bonding (the
+  same fix shipped for macOS in v1.5), so live HR can come through. Experimental; isolated to the 5/MG
+  path — WHOOP 4.0 unaffected (issue #17).
+- **Fixed (Health Monitor): the heart-rate chart freezing when opened from the Live page.** Leaving
+  Live sent `TOGGLE_REALTIME_HR=0`, switching the stream off, so Health Monitor (which also shows live
+  HR) got nothing. The realtime stream is now ref-counted and stays on while any live-HR screen is
+  visible (issue #18).
+
+---
+
 ## 1.9 — Fix: bonded but no live data (Android)
 
 - **Fixed (Android): a strap that connects and bonds but shows no live data** — heart rate, battery,

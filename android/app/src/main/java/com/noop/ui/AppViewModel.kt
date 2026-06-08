@@ -181,11 +181,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Start the strap's real-time HR stream and keep it re-armed (the client's keep-alive owns it now). */
-    fun startRealtimeHr() = ble.startRealtime()
+    /** How many screens currently want the live HR stream (Live, Health Monitor, …). The stream stays
+     *  on while ANY of them is visible, so navigating between them doesn't stop it (issue #18: leaving
+     *  Live sent TOGGLE_REALTIME_HR=0, leaving Health Monitor with a frozen value). */
+    private var realtimeWanters = 0
 
-    /** Stop the strap's real-time HR stream. */
-    fun stopRealtimeHr() = ble.stopRealtime()
+    /** A screen that shows live HR appeared. Arms the realtime stream on the 0→1 transition. */
+    fun requestRealtimeHr() {
+        if (realtimeWanters++ == 0) ble.startRealtime()
+    }
+
+    /** A live-HR screen went away. Stops the realtime stream only when the last one leaves. */
+    fun releaseRealtimeHr() {
+        realtimeWanters = (realtimeWanters - 1).coerceAtLeast(0)
+        if (realtimeWanters == 0) ble.stopRealtime()
+    }
 
     /** Ask the strap for its current battery level. */
     fun getBattery() = ble.send(CommandNumber.GET_BATTERY_LEVEL)

@@ -667,6 +667,15 @@ class WhoopBleClient(
             // Port of didWriteValueFor: a CONFIRMED-write completion (no error) == bonding succeeded.
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 log("Confirmed write failed: status=$status")
+            } else if (!didBond && connectedFamily == DeviceFamily.WHOOP5) {
+                // EXPERIMENTAL (issue #17): the CLIENT_HELLO is now a confirmed write, so this ACK means
+                // just-works bonding completed — the standard HR/battery profiles should start streaming
+                // (the strap won't serve them on an unauthenticated link). Fire the opt-in puffin probe
+                // now that the link is bonded.
+                didBond = true
+                _state.value = _state.value.copy(bonded = true)
+                log("WHOOP 5/MG: CLIENT_HELLO acked — link established; HR should now stream (experimental).")
+                if (puffinExperiment.isEnabled) cmdCharacteristic?.let { writePuffinRealtimeHrProbe(g, it) }
             } else if (!didBond && connectedFamily == DeviceFamily.WHOOP4) {
                 didBond = true
                 _state.value = _state.value.copy(bonded = true)
@@ -921,6 +930,9 @@ class WhoopBleClient(
         handler.postDelayed({ requestSync() }, INITIAL_BACKFILL_DELAY_MS)
         startBackfillTimer()
         startKeepAlive()
+        // Arm realtime HR now if a screen already wants it (Live/Health Monitor opened before the bond
+        // completed) — otherwise the stream would only start at the next keep-alive tick (issue #18).
+        if (wantsRealtime) send(CommandNumber.TOGGLE_REALTIME_HR, byteArrayOf(1))
     }
 
     // ====================================================================================
@@ -1130,27 +1142,27 @@ class WhoopBleClient(
     @SuppressLint("MissingPermission")
     private fun writeClientHello(g: BluetoothGatt, ch: BluetoothGattCharacteristic) {
         val hello = DeviceFamily.WHOOP5.clientHello ?: return
-        log("WHOOP 5/MG: writing CLIENT_HELLO to fd4b0002 (experimental).")
+        // CONFIRMED (with-response) write — mirrors the macOS v1.5 fix and the hardware-verified finding
+        // that the CLIENT_HELLO confirmed write triggers the strap's just-works bond. A 5/MG strap won't
+        // stream HR (even over the standard 0x2A37 profile) on an UNauthenticated link, so the old
+        // unacknowledged write left it bond-less and silent — CLIENT_HELLO written, then nothing (#17).
+        // Hold the slot until the ACK; the opt-in puffin probe now fires post-bond (onCharacteristicWrite).
+        log("WHOOP 5/MG: writing CLIENT_HELLO to fd4b0002 with response (to trigger bonding, experimental).")
+        writeInFlight = true
         val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            g.writeCharacteristic(ch, hello, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) ==
+            g.writeCharacteristic(ch, hello, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) ==
                 BluetoothGatt.GATT_SUCCESS
         } else {
             @Suppress("DEPRECATION")
             run {
-                ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                ch.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 ch.value = hello
                 g.writeCharacteristic(ch)
             }
         }
-        if (!ok) log("CLIENT_HELLO write rejected by stack")
-
-        // OPT-IN probe (Settings → Experimental · WHOOP 5/MG, OFF by default). After CLIENT_HELLO,
-        // ask the strap to start its realtime stream with a puffin-framed TOGGLE_REALTIME_HR. This is
-        // a guess we cannot verify without 5/MG hardware; it is written UNACKNOWLEDGED to fd4b0002
-        // only, and is gated on the WHOOP5 family — WHOOP 4.0 never reaches this path. Port of the
-        // PuffinExperiment.isEnabled block in BLEManager.didDiscoverCharacteristicsFor (whoop5 case).
-        if (connectedFamily == DeviceFamily.WHOOP5 && puffinExperiment.isEnabled) {
-            writePuffinRealtimeHrProbe(g, ch)
+        if (!ok) {
+            writeInFlight = false
+            log("CLIENT_HELLO write rejected by stack")
         }
     }
 

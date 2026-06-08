@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -45,6 +46,14 @@ private const val HR_MAX_DEFAULT = 190
 fun HealthScreen(vm: AppViewModel) {
     val live by vm.live.collectAsStateWithLifecycle()
     val today by vm.today.collectAsStateWithLifecycle()
+
+    // Health Monitor shows live HR too, so it must keep the realtime stream on while it's visible —
+    // otherwise leaving the Live page stopped the stream and this page froze (issue #18). Ref-counted
+    // in the ViewModel, so handing off between Live and here never drops the stream.
+    DisposableEffect(Unit) {
+        vm.requestRealtimeHr()
+        onDispose { vm.releaseRealtimeHr() }
+    }
 
     val displayHr = displayHr(live)
     val hasLiveHr = displayHr != null

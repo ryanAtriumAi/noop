@@ -69,15 +69,14 @@ fun LiveScreen(viewModel: AppViewModel) {
         if (granted) viewModel.connect() else blePermLauncher.launch(blePerms)
     }
 
-    // Start the realtime HR stream when bonded and on-screen; stop on leave.
-    LaunchedEffect(live.bonded) {
-        if (live.bonded) {
-            viewModel.startRealtimeHr()
-            viewModel.getBattery()
-        }
-    }
+    // Keep the realtime HR stream on while this screen is visible (ref-counted in the ViewModel, so
+    // navigating to Health Monitor — which also wants it — doesn't stop it). Refresh battery on bond.
     DisposableEffect(Unit) {
-        onDispose { viewModel.stopRealtimeHr() }
+        viewModel.requestRealtimeHr()
+        onDispose { viewModel.releaseRealtimeHr() }
+    }
+    LaunchedEffect(live.bonded) {
+        if (live.bonded) viewModel.getBattery()
     }
 
     ScreenScaffold(title = "Live", subtitle = "All your data · none of the cloud") {
