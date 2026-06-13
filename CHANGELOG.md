@@ -17,6 +17,16 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 2.8.1 — Battery + responsiveness: smarter sync, lighter notification
+
+- **Improved (battery):** NOOP backs off history-sync polling when the strap keeps handing over nothing
+  (off-wrist / not banking) instead of re-trying every 90s; a manual or reconnect sync still runs
+  instantly. Thanks @ryanbr. (#217)
+- **Improved:** a just-synced night's Charge / Effort / Rest appear the moment the sync finishes, not up
+  to 15 minutes later. Thanks @FrostDev7. (#218)
+- **Improved (Android, battery):** the persistent notification no longer re-draws with live HR every
+  second — it updates only when connection / sync / recovery / battery changes. Thanks @Eph00n & @spasypaddy. (#216)
+
 ## 2.8.0 — New: Week in review, a live body console, fresher charts & more
 
 A wave of new features and community contributions, reimplemented under the project identity.

@@ -161,7 +161,20 @@ class WhoopConnectionService : Service() {
         ServiceCompat.startForeground(this, NOTIF_ID, notification, type)
     }.isSuccess
 
+    /** Signature of the fields the notification actually renders (#216). The live HR stream emits ~1 Hz
+     *  but the notification no longer shows BPM, so we only re-post when one of THESE changes — turning
+     *  a per-beat wakeup into a handful of updates a day. */
+    private var lastNotificationKey: String? = null
+
     private fun postNotification(state: LiveState, recoveryPct: Double? = null) {
+        val key = listOf(
+            state.connected,
+            state.backfilling,
+            recoveryPct?.roundToInt(),
+            state.batteryPct?.roundToInt(),
+        ).joinToString("|")
+        if (key == lastNotificationKey) return
+        lastNotificationKey = key
         // Defensive: a notify() throw (OEM quirk, revoked POST_NOTIFICATIONS on some ROMs) must not
         // crash the collector and tear down the connection we exist to keep alive.
         runCatching {
@@ -171,10 +184,14 @@ class WhoopConnectionService : Service() {
     }
 
     private fun buildNotification(state: LiveState, recoveryPct: Double?): Notification {
+        // #216: deliberately NO live BPM in the title. A per-beat-changing notification forces the
+        // foreground service to re-post (and wake the device) ~once a second all day, which is a real
+        // battery cost for a number nobody reads off the lock screen. The title now reflects only the
+        // connection / sync state, which changes rarely — see postNotification's dedup.
         val title = when {
-            !state.connected -> "Reconnecting to your WHOOP…"
-            state.heartRate != null -> "${state.heartRate} bpm"
-            else -> "Connected to your WHOOP"
+            !state.connected   -> "Reconnecting to your WHOOP…"
+            state.backfilling  -> "Syncing strap history…"
+            else               -> "Connected to your WHOOP"
         }
         val detail = buildList {
             add(if (state.connected) "Streaming in the background" else "Keeping the link open")

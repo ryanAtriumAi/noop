@@ -18,6 +18,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "2.8.1",
+          "buildVersion": "44",
+          "date": "2026-06-13",
+          "localizedDescription": "Battery + responsiveness: sync backoff, instant post-sync scoring, lighter notification.",
+          "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.8.1/NOOP-v2.8.1-ios.ipa",
+          "size": 5778200,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "2.8.0",
           "buildVersion": "43",
           "date": "2026-06-13",
@@ -118,12 +127,12 @@
           "NSHealthUpdateUsageDescription": "NOOP writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it."
         }
       },
-      "version": "2.8.0",
-      "buildVersion": "43",
+      "version": "2.8.1",
+      "buildVersion": "44",
       "versionDate": "2026-06-13",
-      "versionDescription": "New: Week in review, live body console, live HR time axis, fresher charts.",
-      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.8.0/NOOP-v2.8.0-ios.ipa",
-      "size": 5778201,
+      "versionDescription": "Battery + responsiveness: sync backoff, instant post-sync scoring, lighter notification.",
+      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.8.1/NOOP-v2.8.1-ios.ipa",
+      "size": 5778200,
       "minOSVersion": "17.0"
     }
   ],
