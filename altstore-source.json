@@ -18,6 +18,15 @@
       "screenshotURLs": [],
       "versions": [
         {
+          "version": "2.18.0",
+          "buildVersion": "69",
+          "date": "2026-06-14",
+          "localizedDescription": "Export raw sensor data (CSV)",
+          "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.18.0/NOOP-v2.18.0-ios.ipa",
+          "size": 6594330,
+          "minOSVersion": "17.0"
+        },
+        {
           "version": "2.17.1",
           "buildVersion": "68",
           "date": "2026-06-14",
@@ -343,12 +352,12 @@
           "NSHealthUpdateUsageDescription": "NOOP writes the metrics it computes from your strap back into Apple Health, on-device and only when you allow it."
         }
       },
-      "version": "2.17.1",
-      "buildVersion": "68",
+      "version": "2.18.0",
+      "buildVersion": "69",
       "versionDate": "2026-06-14",
-      "versionDescription": "Charge calibrating state for new straps",
-      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.17.1/NOOP-v2.17.1-ios.ipa",
-      "size": 6576895,
+      "versionDescription": "Export raw sensor data (CSV)",
+      "downloadURL": "https://github.com/NoopApp/noop/releases/download/v2.18.0/NOOP-v2.18.0-ios.ipa",
+      "size": 6594330,
       "minOSVersion": "17.0"
     }
   ],
