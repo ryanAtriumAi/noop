@@ -7,7 +7,6 @@ import com.noop.data.SkinTempSample
 import com.noop.data.RespSample
 import com.noop.data.RrInterval
 import com.noop.data.StepSample
-import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneOffset
@@ -63,20 +62,35 @@ object AnalyticsEngine {
     /**
      * JSON-encode stage segments to the verbatim array shape the sleepSession cache
      * stores. Mirrors Swift `encodeStages` (JSONEncoder on [StageSegment]); the field
-     * order/names (start, end, stage) match the Codable wire shape and the Android
-     * SleepScreen reader.
+     * names (start, end, stage) match the Codable wire shape and the Android
+     * SleepScreen reader (decoders are key-order-independent, so the reader is unaffected).
+     *
+     * DETERMINISM (parity with Swift's `.sortedKeys`): the object keys are emitted in a FIXED
+     * alphabetical order — `end`, `stage`, `start` — built by hand rather than via
+     * `JSONObject.put` order. `org.json.JSONObject` (both the stock Android runtime impl and the
+     * `org.json:json` JVM test jar) backs its key store with a plain `HashMap`, so `toString()`
+     * emits keys in hash-iteration order, which is NOT insertion order and is not guaranteed stable
+     * across runtimes/versions. The post-sync self-heal ([SleepStageHealer.selfHealEditedStages])
+     * skips its write when the re-derived JSON equals the stored JSON; an unstable key order would
+     * defeat that equality check (spurious rewrites, or a Robolectric-vs-device mismatch). Sorting
+     * the keys makes a re-derive over identical bounds+raw byte-identical to what was stored.
+     * Values are escaped via [JSONObject.quote] (the stage string is constrained, but stay safe).
      */
     fun encodeStages(stages: List<StageSegment>): String? {
         return try {
-            val arr = JSONArray()
-            for (s in stages) {
-                val o = JSONObject()
-                o.put("start", s.start)
-                o.put("end", s.end)
-                o.put("stage", s.stage)
-                arr.put(o)
+            val sb = StringBuilder()
+            sb.append('[')
+            for ((i, s) in stages.withIndex()) {
+                if (i > 0) sb.append(',')
+                // Keys alphabetical: end, stage, start — matches Swift JSONEncoder.outputFormatting
+                // = .sortedKeys on StageSegment{start,end,stage}.
+                sb.append("{\"end\":").append(s.end)
+                    .append(",\"stage\":").append(JSONObject.quote(s.stage))
+                    .append(",\"start\":").append(s.start)
+                    .append('}')
             }
-            arr.toString()
+            sb.append(']')
+            sb.toString()
         } catch (_: Throwable) {
             null
         }

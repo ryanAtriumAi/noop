@@ -378,7 +378,21 @@ object IntelligenceEngine {
         // recovery/performance come verbatim from the export and are NOT recomputed here. Same honest
         // scope as iOS. Keyed by the IMMUTABLE detected `startTs` (never `effectiveStartTs`), so an
         // edited block lands exactly on its detected twin.
-        val editedRows = repo.sleepSessions(computedId, windowStart, nowSeconds).filter { it.userEdited }
+        //
+        // Self-heal any night edited before its raw streams synced (port of iOS PR #449, see
+        // [SleepStageHealer.selfHealEditedStages]): re-derive stages from the now-available raw over the
+        // night's LOCKED bounds, rewrite the stage breakdown ONLY (userEdited=1 rows, bounds untouched),
+        // and return the refreshed edited rows so `editsByStart` below carries the REAL staging into the
+        // daily aggregate this same pass. A no-op for nights already staged from raw (idempotent) and for
+        // imported nights (raw never dense). MUST run before `editsByStart` so healed stages flow into
+        // Rest/recovery this run. Raw streams are read under the STRAP id; edited rows under COMPUTED.
+        val editedRows = SleepStageHealer.selfHealEditedStages(
+            repo = repo,
+            computedDeviceId = computedId,
+            strapDeviceId = importedDeviceId,
+            windowStart = windowStart,
+            windowEnd = nowSeconds,
+        )
         val editsByStart: Map<Long, String?> = editedRows.associate { it.startTs to it.stagesJSON }
 
         for (res in scoredNights) {

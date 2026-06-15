@@ -37,6 +37,14 @@ object AppChangelog {
     /** Newest first. */
     val releases: List<Release> = listOf(
         Release(
+            version = "4.2.2",
+            title = "Sleep stages heal themselves after a sync",
+            date = "June 2026",
+            items = listOf(
+                "Fixed wrong sleep stages when you edited a night before it finished syncing. If you corrected a night's wake time before the strap had imported that window's raw data, the stage breakdown could come out wrong and stay wrong. Now the stages re-derive from the real data the moment it arrives — affected nights heal automatically on the next sync — while your bed/wake correction stays locked. (Brings Android to parity with the iPhone/Mac fix.) Thanks @claypilat (#449).",
+            ),
+        ),
+        Release(
             version = "4.2.1",
             title = "Optional inactivity nudge",
             date = "June 2026",

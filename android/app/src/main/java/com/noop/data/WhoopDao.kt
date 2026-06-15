@@ -83,6 +83,27 @@ interface WhoopDao : DeviceRegistryDao {
     @Query("DELETE FROM sleepSession WHERE deviceId = :deviceId AND startTs = :startTs")
     suspend fun deleteSleepSession(deviceId: String, startTs: Long)
 
+    /**
+     * Replace ONLY the stage breakdown of an already user-edited night, leaving the corrected
+     * bed/wake bounds (startTsAdjusted/endTs) and the userEdited flag untouched. Port of iOS
+     * MetricsCache.updateSleepStages (PR #449). The post-sync self-heal
+     * ([com.noop.analytics.SleepStageHealer]) calls this when a strap sync finally delivers the raw
+     * streams for a night that was edited BEFORE they arrived: at edit time the stages were
+     * fabricated by SleepWindowReclip (a trailing "wake" block) because the raw wasn't present yet,
+     * and userEdited then froze that breakdown against every later sync. This swaps in the real
+     * re-derived stages without disturbing the user's bound correction.
+     *
+     * Scoped to `userEdited = 1` rows (Room stores Boolean true as INTEGER 1) so it can NEVER rewrite
+     * an un-edited (freely re-derivable) night — the regular recompute upsert owns those. Keyed by the
+     * IMMUTABLE detected primary key (deviceId, startTs); the caller passes the detected startTs, never
+     * effectiveStartTs. Returns rows changed (0 when no such edited session exists).
+     */
+    @Query(
+        "UPDATE sleepSession SET stagesJSON = :stagesJSON " +
+            "WHERE deviceId = :deviceId AND startTs = :detectedStartTs AND userEdited = 1"
+    )
+    suspend fun updateSleepStages(deviceId: String, detectedStartTs: Long, stagesJSON: String): Int
+
     @Upsert
     suspend fun upsertMetricSeries(rows: List<MetricSeriesRow>)
 

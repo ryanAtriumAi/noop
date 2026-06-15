@@ -200,6 +200,14 @@ class WhoopRepository(private val dao: WhoopDao) {
      *  the user clear a misread or spurious night so the day recomputes without it (#281). */
     suspend fun deleteSleepSession(session: SleepSession) =
         dao.deleteSleepSession(session.deviceId, session.startTs)
+
+    /** Narrow stages-ONLY write for the post-sync self-heal (port of iOS PR #449
+     *  MetricsCache.updateSleepStages, driven by [com.noop.analytics.SleepStageHealer]). Replaces a
+     *  user-edited night's stage breakdown with stages re-derived from the now-available raw, leaving
+     *  the corrected bed/wake bounds and the userEdited flag untouched. Scoped to userEdited=1 rows by
+     *  the DAO query; keyed by the IMMUTABLE detected [detectedStartTs]. Returns rows changed. */
+    suspend fun updateSleepStages(deviceId: String, detectedStartTs: Long, stagesJSON: String): Int =
+        dao.updateSleepStages(deviceId, detectedStartTs, stagesJSON)
     suspend fun upsertMetricSeries(rows: List<MetricSeriesRow>) = dao.upsertMetricSeries(rows)
     suspend fun upsertJournal(rows: List<JournalEntry>) = dao.upsertJournal(rows)
     suspend fun upsertWorkouts(rows: List<WorkoutRow>) = dao.upsertWorkouts(rows)
