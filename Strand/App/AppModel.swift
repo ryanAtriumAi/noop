@@ -280,6 +280,11 @@ final class AppModel: ObservableObject {
             await self.repo.refresh()                          // surface any imported data at once
             await self.wireSourceCoordinator()                 // dormant unless a generic strap is active
             try? await Task.sleep(nanoseconds: 6_000_000_000)  // give the first offload a moment
+            // One-shot on-upgrade heal (#547): purge rows a bad-clock strap dated to scattered garbage
+            // (far-past / bogus-2027 / FUTURE) from an older build, then rescore the real days. Runs
+            // BEFORE the Effort rescore + analyzeRecent loop so both operate on a cleaned DB. Persisted
+            // flag → no-op on every subsequent launch; idempotent on a clean DB.
+            await self.intelligence.runTimestampHealIfNeeded()
             // One-shot on-upgrade Effort rescore (#313): recompute strain from source across the FULL
             // history once, so any deep-history rows an older build left on the 0–21 axis regenerate on
             // the 0–100 axis. Guarded by a persisted flag, so this is a no-op on every subsequent launch.

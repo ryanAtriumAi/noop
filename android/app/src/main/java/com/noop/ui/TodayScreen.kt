@@ -403,13 +403,21 @@ fun TodayScreen(
     // row genuinely lacks still falls through to "No Data". Non-null only when: it's today, today has no
     // recovery, and we're not mid-calibration (calibration owns its own copy). days is oldest→newest;
     // exclude the (still-null) today key so we never echo "today". Mirrors iOS lastScoredRecoveryDay.
-    val lastScoredRecoveryDay: DailyMetric? = remember(days, selectedDayKey, recoveryCalibration, selectedDayOffset, displayMetric) {
+    // #547 carry-over upper bound: the LATER of the logical "today" (rolls at 04:00) and the local
+    // calendar day. Using the later key means a legitimate just-after-midnight carry-over of yesterday's
+    // logical day is NOT dropped, while any FUTURE-dated row (a bad strap clock) still sorts past it and
+    // is excluded. ISO date strings compare chronologically.
+    val carryOverTodayKey = remember(todayDate) {
+        maxOf(todayDate.toString(), java.time.LocalDate.now().toString())
+    }
+    val lastScoredRecoveryDay: DailyMetric? = remember(days, selectedDayKey, recoveryCalibration, selectedDayOffset, displayMetric, carryOverTodayKey) {
         lastScoredRecoveryDay(
             days = days,
             selectedDayKey = selectedDayKey,
             isToday = selectedDayOffset == 0,
             todayScored = displayMetric?.recovery != null,
             isCalibrating = recoveryCalibration != null,
+            today = carryOverTodayKey,
         )
     }
     // Carry-over Charge for TODAY — the prior scored row's recovery + its "Last night · <date>" caption.
@@ -1627,9 +1635,16 @@ internal fun lastScoredRecoveryDay(
     isToday: Boolean,
     todayScored: Boolean,
     isCalibrating: Boolean,
+    // #547 carry-over guard: the local "today" key ("yyyy-MM-dd"). A stray FUTURE-dated row (a bad strap
+    // clock wrote a day past today) must NEVER be picked as "last night" — that's how #547's Today header
+    // read "12 Jul". Cheap belt-and-suspenders alongside the ingest gate + heal: filter candidates to
+    // day <= today so even a future row that slipped through can't surface here. ISO date keys sort
+    // chronologically, so a plain string compare is correct. Defaulted to MAX so an un-updated call site
+    // keeps the prior behaviour; the Today call site passes the real local today.
+    today: String = "9999-12-31",
 ): DailyMetric? {
     if (!isToday || todayScored || isCalibrating) return null
-    return days.lastOrNull { it.recovery != null && it.day != selectedDayKey }
+    return days.lastOrNull { it.recovery != null && it.day != selectedDayKey && it.day <= today }
 }
 
 /** A prior day's Charge carried over on TODAY (value + "Last night · <date>" caption) while tonight's

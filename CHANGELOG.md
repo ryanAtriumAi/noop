@@ -17,6 +17,19 @@ approximate; downloads are on the [Releases](https://github.com/NoopApp/noop/rel
 
 ---
 
+## 6.0.3 — Date-hygiene fix for straps with a bad clock (all platforms)
+
+A targeted robustness fix for a real bug pikapik487 caught with detailed logs.
+
+- **Fixed: a WHOOP whose internal clock or flash is in a bad state could scramble your dashboard.** Such a strap can hand over historical records stamped with implausible dates (years in the past, or even in the future). NOOP trusted those timestamps, which let one phantom ~12-hour block get attributed to every day (the same sleep duration repeating across dates) and could make the Today screen show a future date as "last night". NOOP now sanity-checks every record's timestamp at ingestion and drops anything implausible (before 2023 or more than a day in the future), regardless of what the strap's clock claims. Normal records are unaffected.
+- **Heals existing data.** If your data already got scrambled by this, updating to 6.0.3 does a one-time cleanup of the bad rows and re-scores your real days cleanly, so the fix actually repairs your dashboard rather than just preventing it going forward.
+- A defensive guard so the Today "last night" carry-over can never select a day after today. (#547)
+
+**Install / update**
+- **macOS:** the universal app zip on the Releases page.
+- **iOS:** sideload the IPA (AltStore / SideStore).
+- **Android:** the APK on the Releases page.
+
 ## 6.0.2 — Sleep, properly sorted, and an app that explains itself (all platforms)
 
 A from-scratch rework of how NOOP picks your main sleep, plus a new layer of in-app explanations so you are never left guessing what the app is doing or why.

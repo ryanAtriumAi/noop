@@ -135,6 +135,40 @@ final class IntelligenceEngine: ObservableObject {
         if !computing { UserDefaults.standard.set(true, forKey: Self.effortRescoreFlagKey) }
     }
 
+    /// UserDefaults flag guarding the one-shot #547 implausible-timestamp DB heal (below). Set once the
+    /// heal completes so it never re-runs.
+    static let timestampHealFlagKey = "intelligence.timestampHeal.v547.done"
+
+    /// One-shot, on-upgrade heal of a database polluted by a bad-clock strap (#547, pikapik). The ingest
+    /// gate now keeps garbage-timestamped records out, but a user who synced on an older build already has
+    /// rows dated to scattered garbage (far-past, a bogus 2027, FUTURE dates) — which made one ~12h block
+    /// re-attribute to every day (the repeated totalSleepMin=721 across many days) and a future row surface
+    /// as the Today "last night" carry-over. This purges those rows ONCE, then rescores from the surviving
+    /// real raw data so the genuine days recompute cleanly. Idempotent (a clean DB deletes nothing) and
+    /// re-running is harmless, but a persisted flag skips it on every later launch. Runs BEFORE the normal
+    /// `analyzeRecent` loop so the rescore it triggers operates on an already-cleaned DB.
+    func runTimestampHealIfNeeded(historyDays: Int = 4000) async {
+        guard !UserDefaults.standard.bool(forKey: Self.timestampHealFlagKey) else { return }
+        guard let store = await repo.storeHandle() else { return }   // no store yet → retry next launch
+        let result: WhoopStore.TimestampHealResult
+        do {
+            result = try await store.healImplausibleTimestamps()
+        } catch {
+            NSLog("IntelligenceEngine: timestamp heal (#547) FAILED — \(error); will retry next launch")
+            return   // leave the flag unset so a transient failure retries
+        }
+        if result.didChange {
+            diagnosticSink?("Heal(#547): purged \(result.rawRowsDeleted) raw + \(result.computedRowsDeleted) computed row(s) with implausible (bad-clock) timestamps; rescoring the real days.")
+            // Recompute the affected real days from the surviving raw rows so the polluted (e.g. 721)
+            // blocks regenerate cleanly. The dashboard refresh happens inside analyzeRecent on persist.
+            await analyzeRecent(maxDays: historyDays)
+            // Only mark done once the rescore actually ran (wasn't skipped by a concurrent tick holding
+            // the `computing` lock), so a skipped pass retries next launch — correctness over a one-time cost.
+            guard !computing else { return }
+        }
+        UserDefaults.standard.set(true, forKey: Self.timestampHealFlagKey)
+    }
+
     /// Compute on-device scores for each of the last `maxDays` that actually has raw HR data.
     /// Personal baselines (HRV / resting HR) are folded from the imported history, so even the first
     /// live night can be scored against your norm.

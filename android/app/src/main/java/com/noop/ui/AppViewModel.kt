@@ -507,6 +507,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         // Mirrors macOS AppModel's launch + 15-min analyze loop.
         viewModelScope.launch {
             delay(FIRST_OFFLOAD_GRACE_MS) // give the first offload a moment
+            // One-shot on-upgrade #547 timestamp heal: a bad strap clock/flash (pikapik) wrote raw +
+            // computed rows with garbage timestamps (far-past / a 2027 spike / a future date) BEFORE the
+            // ingest gate existed — one ~12h polluted block was re-attributed to every day (the repeated
+            // 721-min sleep block) and a future-dated row surfaced as "last night · 12 Jul". Purge those
+            // rows ONCE so the analyzeRecent pass below recomputes the real days cleanly. Guarded by a
+            // persisted flag (re-running is harmless — the deletes are idempotent). Runs BEFORE the rescore.
+            runCatching {
+                if (!NoopPrefs.tsHealDone(appContext)) {
+                    val purged = repository.healImplausibleTimestamps()
+                    if (purged > 0) {
+                        ble.externalLog(
+                            "Heal #547: purged $purged row(s) with an implausible timestamp " +
+                                "(bad strap clock — far-past or future-dated); rescoring clean days.",
+                        )
+                    }
+                    NoopPrefs.setTsHealDone(appContext)
+                }
+            }.onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }
             // One-shot on-upgrade Effort rescore (#313): recompute strain from source across the FULL
             // history once, so any deep-history rows an older build left on the 0–21 axis regenerate on
             // the 0–100 axis. Guarded by a persisted flag, so it's a no-op on every subsequent launch.

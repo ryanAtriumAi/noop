@@ -448,6 +448,18 @@ object NoopPrefs {
         of(context).edit().putBoolean(KEY_EFFORT_RESCORE_DONE, true).apply()
     }
 
+    /** Whether the one-shot #547 implausible-timestamp heal has run. Set true once it completes so the
+     *  on-upgrade purge of bad-strap-clock rows (far-past / future-dated) never re-runs. Re-running is
+     *  harmless (the deletes are idempotent), but the flag avoids the work on every launch. */
+    const val KEY_TS_HEAL_DONE = "noop.tsHeal.v547.done"
+
+    fun tsHealDone(context: Context): Boolean =
+        of(context).getBoolean(KEY_TS_HEAL_DONE, false)
+
+    fun setTsHealDone(context: Context) {
+        of(context).edit().putBoolean(KEY_TS_HEAL_DONE, true).apply()
+    }
+
     /** The last strap we bonded to (address + model), persisted so NOOP can reconnect to it directly on
      *  the next launch — e.g. after an APK update restarts the process (#67). On-device only; never sent. */
     const val KEY_LAST_DEVICE_ADDR = "noop.lastDeviceAddress"

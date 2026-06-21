@@ -214,7 +214,12 @@ struct TodayView: View {
     static func lastScoredRecoveryDay(days: [DailyMetric], selectedDayKey: String,
                                       isToday: Bool, todayScored: Bool, isCalibrating: Bool) -> DailyMetric? {
         guard isToday, !todayScored, !isCalibrating else { return nil }
-        return days.last(where: { $0.recovery != nil && $0.day != selectedDayKey })
+        // Defensive future-day guard (#547): the carry-over must NEVER select a day after today's key, or a
+        // stray future-dated row (a bad-clock strap that slipped past the ingest gate / pre-heal DB) would
+        // surface as "last night · 12 Jul". `selectedDayKey` is today's logical-day key here (isToday), and
+        // yyyy-MM-dd compares lexicographically, so `$0.day < selectedDayKey` keeps only genuine prior days.
+        // Belt-and-suspenders on top of the gate + one-time heal — cheap and never wrong.
+        return days.last(where: { $0.recovery != nil && $0.day < selectedDayKey })
     }
 
     /// "Last night · <date>" stamp for the carried-over recovery row, keyed on that scored day's own

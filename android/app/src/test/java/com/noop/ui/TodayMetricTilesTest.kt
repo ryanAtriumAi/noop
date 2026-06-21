@@ -268,4 +268,42 @@ class TodayMetricTilesTest {
         assertNull(carried?.spo2Pct)
         assertEquals(14.2, carried?.respRateBpm)
     }
+
+    // MARK: #547 carry-over future-day guard — a stray FUTURE-dated row (a bad strap clock wrote a day
+    // past "today") must NEVER be picked as "last night"; that's exactly how #547's Today header read
+    // "12 Jul". Belt-and-suspenders alongside the ingest gate + heal.
+
+    @Test
+    fun lastScoredRecoveryDay_neverCarriesAFutureDatedRow_547() {
+        // A bad-clock row dated AFTER today sits at the end of the oldest→newest list; without the
+        // day <= today filter, lastOrNull would pick it and surface "Last night · <future date>".
+        val days = listOf(
+            recDay("2026-06-18", 72.0),     // the real freshest scored prior day
+            recDay("2026-07-12", 90.0),     // future-dated pollution (#547 "12 Jul")
+        )
+        val carried = lastScoredRecoveryDay(
+            days, selectedDayKey = "2026-06-19",
+            isToday = true, todayScored = false, isCalibrating = false,
+            today = "2026-06-19",
+        )
+        assertEquals("2026-06-18", carried?.day)   // the future row is skipped
+        assertEquals(72.0, carried?.recovery)
+    }
+
+    @Test
+    fun lastScoredRecoveryDay_carriesTodayBoundaryDay_inclusive_547() {
+        // A row dated exactly "today" (e.g. the local calendar day at a just-after-midnight rollover) is
+        // NOT future — the <= today bound keeps it eligible so a legitimate carry-over is not dropped.
+        val days = listOf(
+            recDay("2026-06-18", 60.0),
+            recDay("2026-06-19", 72.0),     // == today; eligible (it isn't the selected/unscored key)
+        )
+        val carried = lastScoredRecoveryDay(
+            days, selectedDayKey = "2026-06-20",   // today's still-null logical key
+            isToday = true, todayScored = false, isCalibrating = false,
+            today = "2026-06-19",
+        )
+        assertEquals("2026-06-19", carried?.day)
+        assertEquals(72.0, carried?.recovery)
+    }
 }

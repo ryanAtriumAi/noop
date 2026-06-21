@@ -25,6 +25,14 @@ data class StreamBatch(
     val steps: List<StepRow> = emptyList(),
     /** HR derived from the WHOOP 5/MG v26 optical PPG waveform (autocorrelation). (#156) */
     val ppgHr: List<PpgHrRow> = emptyList(),
+    /**
+     * #547: how many historical records this batch DROPPED because their timestamp was implausible
+     * (older than 2023-11 or more than a day ahead of now) — a bad strap clock/flash artefact. A
+     * diagnostic counter only, NOT decoded data, so it is deliberately excluded from [isEmpty]. The
+     * Backfiller surfaces it once per session via its existing strap-log seam so a bad-clock strap is
+     * visible in a shared log. Defaulted so every existing constructor/copy call site is unchanged.
+     */
+    val droppedImplausibleTs: Int = 0,
 ) {
     val isEmpty: Boolean
         get() = hr.isEmpty() && rr.isEmpty() && events.isEmpty() && battery.isEmpty() &&
@@ -85,6 +93,32 @@ data class DataFreshness(
     companion object {
         val EMPTY = DataFreshness()
     }
+}
+
+/**
+ * #547 one-time heal predicates, kept PURE (no DB) so they are unit-testable on the JVM. A bad strap
+ * clock/flash (pikapik) wrote rows with implausible timestamps BEFORE the ingest gate existed; the heal
+ * purges them on upgrade so a normal rescore recomputes the real days cleanly.
+ *
+ * Bounds mirror the ingest gate exactly: a unix-second `ts` is implausible when below
+ * [com.noop.protocol.MIN_PLAUSIBLE_UNIX] (2023-11) or above now + [com.noop.protocol.FUTURE_MARGIN]
+ * (one day). A computed daily `day` ("yyyy-MM-dd") is implausible when it sorts AFTER the local "today"
+ * key (a future-dated day) or before the floor day. The same predicate the SQL deletes apply, exposed so
+ * a test pins the boundary behaviour without Room.
+ */
+object HistoryHeal {
+    /** True when a unix-second timestamp is outside the plausible window [min, nowSec + futureMargin]. */
+    fun isImplausibleTs(
+        ts: Long,
+        nowSec: Long,
+        minTs: Long = com.noop.protocol.MIN_PLAUSIBLE_UNIX,
+        futureMargin: Long = com.noop.protocol.FUTURE_MARGIN,
+    ): Boolean = ts < minTs || ts > nowSec + futureMargin
+
+    /** True when a "yyyy-MM-dd" computed-day key is future (after [today]) or before [minDay]. ISO date
+     *  strings sort lexicographically in chronological order, so a plain string compare is correct. */
+    fun isImplausibleDay(day: String, today: String, minDay: String): Boolean =
+        day > today || day < minDay
 }
 
 /**
@@ -209,6 +243,48 @@ class WhoopRepository(private val dao: WhoopDao) {
         // dismissedWorkout marker). `endTs` is the span the engine's overlap test uses, since a
         // re-detected onset can drift second-to-second.
         dao.insertDismissedSleep(listOf(DismissedSleep(session.deviceId, session.startTs, session.endTs)))
+    }
+
+    /**
+     * #547 one-time heal: purge rows polluted by a bad-strap-clock timestamp. pikapik's WHOOP 4.0 emitted
+     * records whose `unix` decoded to garbage (far-past / a 2027 spike / a future date) which entered the
+     * DB verbatim before the ingest gate existed. This (a) deletes raw stream rows (HR/PPG-HR/RR/skinTemp/
+     * step/resp/gravity/spo2/event/battery) whose `ts` is implausible, and (b) deletes COMPUTED daily-metric
+     * + sleep-session rows whose day/ts is future or implausibly old — across EVERY device id, since the bad
+     * raw rows sit under the strap id and the bad computed rows under the "-noop" id. The caller then runs a
+     * normal analyzeRecent rescore so the real days recompute cleanly (the repeated 721-minute block is gone
+     * once its garbage rows are purged). Idempotent: a re-run matches nothing.
+     *
+     * Returns the TOTAL number of rows deleted (for the heal log). Bounds default to the ingest-gate
+     * constants; [nowSec] / [today] / [minDay] are injectable so a test pins the boundary deterministically.
+     */
+    suspend fun healImplausibleTimestamps(
+        nowSec: Long = System.currentTimeMillis() / 1000L,
+        today: String = java.time.LocalDate.now().toString(),
+        minTs: Long = com.noop.protocol.MIN_PLAUSIBLE_UNIX,
+        futureMargin: Long = com.noop.protocol.FUTURE_MARGIN,
+    ): Int {
+        val maxTs = nowSec + futureMargin
+        // The oldest plausible computed-day key (the local day of MIN_PLAUSIBLE_UNIX). A day before this is
+        // implausibly old; a day after `today` is future-dated. Both are purged.
+        val minDay = java.time.Instant.ofEpochSecond(minTs)
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+        var deleted = 0
+        // (a) raw streams (all keyed by ts)
+        deleted += dao.pruneHrByTs(minTs, maxTs)
+        deleted += dao.prunePpgHrByTs(minTs, maxTs)
+        deleted += dao.pruneRrByTs(minTs, maxTs)
+        deleted += dao.pruneSkinTempByTs(minTs, maxTs)
+        deleted += dao.pruneStepByTs(minTs, maxTs)
+        deleted += dao.pruneRespByTs(minTs, maxTs)
+        deleted += dao.pruneGravityByTs(minTs, maxTs)
+        deleted += dao.pruneSpo2ByTs(minTs, maxTs)
+        deleted += dao.pruneEventByTs(minTs, maxTs)
+        deleted += dao.pruneBatteryByTs(minTs, maxTs)
+        // (b) computed daily metrics (by day key) + sleep sessions (by startTs)
+        deleted += dao.pruneDailyMetricByDay(today, minDay)
+        deleted += dao.pruneSleepSessionByTs(minTs, maxTs)
+        return deleted
     }
 
     /** Manually ADD a missed sleep session — typically a daytime NAP the detector didn't pick up (#508).

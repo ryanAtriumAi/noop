@@ -25,7 +25,7 @@ object AppChangelog {
      * Bump this when you add a release below. The "What's New" sheet shows automatically when the
      * stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
      */
-    const val CURRENT_VERSION = "6.0.2"
+    const val CURRENT_VERSION = "6.0.3"
 
     data class Release(
         val version: String,
@@ -36,6 +36,13 @@ object AppChangelog {
 
     /** Newest first. */
     val releases: List<Release> = listOf(
+        Release(
+            version = "6.0.3",
+            title = "Date-hygiene fix for straps with a bad clock",
+            date = "June 2026",
+            items = listOf(
+                "**Fixed: a WHOOP with a bad internal clock could scramble your dashboard.** If your strap's clock or flash got into a bad state, it could hand NOOP records stamped with wrong dates, sometimes years off, sometimes in the future. NOOP now sanity-checks every record's timestamp as it comes in and drops anything implausible, so a misbehaving strap can no longer make the same sleep repeat across days or show a future date as your last night. If your data already got scrambled, updating cleans it up automatically and re-scores once. Thanks to pikapik487 for the detailed logs that pinned this down.",
+            )),
         Release(
             version = "6.0.2",
             title = "Sleep, properly sorted, and an app that explains itself",
