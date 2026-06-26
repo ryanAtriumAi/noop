@@ -188,7 +188,7 @@ struct RootView: View {
         case .intelligence: IntelligenceView()
         case .insightsHub: InsightsHubView()
         case .coach: CoachView()
-        case .live: LiveView()
+        case .live: liveDetail
         case .breathe: BreathingView()
         case .intervals: IntervalTimerView()
         case .explore: MetricExplorerView()
@@ -209,7 +209,7 @@ struct RootView: View {
         case .notifications: NotificationSettingsView()
         case .automation: AutomationsView()
         case .smartAlarm: SmartAlarmView()
-        case .settings: SettingsView()
+        case .settings: settingsDetail
         case .support: SupportView()
         }
     }
@@ -225,6 +225,27 @@ struct RootView: View {
         NavigationStack { TodayView() }
         #else
         TodayView()
+        #endif
+    }
+
+    // Settings now pushes into Test Centre via a NavigationLink. On macOS the detail column has no
+    // enclosing NavigationStack of its own, so the same #753 fix applies: wrap the Settings pane in its
+    // own NavigationStack so the Test Centre push gets Back chrome. iOS already wraps each tab.
+    @ViewBuilder private var settingsDetail: some View {
+        #if os(macOS)
+        NavigationStack { SettingsView() }
+        #else
+        SettingsView()
+        #endif
+    }
+
+    // Live's strap-log card pushes into Test Centre (#507/#509). Same macOS NavigationStack wrap so the
+    // push gets Back chrome on the detail column; iOS already wraps each tab.
+    @ViewBuilder private var liveDetail: some View {
+        #if os(macOS)
+        NavigationStack { LiveView() }
+        #else
+        LiveView()
         #endif
     }
 }

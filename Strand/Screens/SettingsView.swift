@@ -163,9 +163,10 @@ struct SettingsView: View {
                 strapCard.staggeredAppear(index: 4)
                 recoveryCard.staggeredAppear(index: 5)
                 featuresCard.staggeredAppear(index: 6)
-                experimentalCard.staggeredAppear(index: 7)
-                backupCard.staggeredAppear(index: 8)
-                aboutCard.staggeredAppear(index: 9)
+                testCentreCard.staggeredAppear(index: 7)
+                experimentalCard.staggeredAppear(index: 8)
+                backupCard.staggeredAppear(index: 9)
+                aboutCard.staggeredAppear(index: 10)
             }
         }
         .alert(backupAlertTitle, isPresented: $showBackupAlert) {
@@ -880,6 +881,34 @@ struct SettingsView: View {
         backupAlertTitle = "Charge baseline recalibrating"
         backupAlertMessage = "NOOP will re-learn your baseline from tonight's data onward. Your history is kept, and it takes a few nights to settle."
         showBackupAlert = true
+    }
+
+    // MARK: - Test Centre (the diagnostic home, #507/#509)
+
+    /// A nav row into the Test Centre, the single home for the diagnostic, log and test controls (spec
+    /// section 7). The strap log, recalibrate, scheduled export and experimental toggles also live there
+    /// on the same bindings, so this is a faster door to the full set without growing this screen.
+    private var testCentreCard: some View {
+        SettingsSection(
+            icon: "testtube.2",
+            title: "Test Centre",
+            blurb: "Turn on a test for the thing that's wrong, wear the strap, then tap Report. Your strap log, recalibrate, scheduled export and experimental probes all live here too."
+        ) {
+            NavigationLink(destination: TestCentreView()) {
+                HStack {
+                    Text("Open Test Centre")
+                        .font(StrandFont.body)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open Test Centre")
+        }
     }
 
     // MARK: - Features (opt-in trackers)
