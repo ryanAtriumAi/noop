@@ -7,7 +7,7 @@ enum AppChangelog {
 
     /// Bump this when you add a release below. The "What's New" sheet shows automatically when the
     /// stored last-seen version is behind this. (Decoupled from the bundle version on purpose.)
-    static let currentVersion = "7.3.0"
+    static let currentVersion = "7.3.1"
 
     struct Release: Identifiable {
         let version: String
@@ -19,6 +19,17 @@ enum AppChangelog {
 
     /// Newest first.
     static let releases: [Release] = [
+        Release(
+            version: "7.3.1",
+            title: "A big bug-fix sweep, with the Test Centre to back it up",
+            date: "June 2026",
+            items: [
+                "**Your scores stop pretending an old night is today's.** When the strap had not banked a fresh night yet, the dashboard could still show a recent score under \"Last night\". A recent carry now reads \"Last night\" honestly, and anything older is clearly relabelled \"Latest sleep\" with its date, so a number is never passed off as today's. We also stopped the strap log shouting \"no banked history, fully charge it\" right after a sync that actually worked, and tightened how between-fragment awake time is counted so the sleep total adds up. (#779, #783, #777, #705)",
+                "**The dashboard freeze on big histories, properly fixed this time.** If you had imported a large history, opening Today could still hitch while the strap offloaded in the background. The data store now serves the dashboard's reads at the same time as the sync writes instead of queuing behind them, so it stays responsive. (#755)",
+                "**The strap behaves better when a pairing goes wrong.** A WHOOP 5 or MG that keeps refusing the secure bond no longer loops forever trying to reconnect: NOOP backs off, tells you why, and stops draining the battery. Haptics now reliably stop when you end a breathing session or disconnect, and a strap with a corrupted clock is caught and explained instead of dropping data on the wrong day. (#750, #747, #769, #773)",
+                "**A pile of smaller fixes.** The Today charge ring and rest tile no longer overlap on iPhone; the pinned Stress card stays in step with its detail page; the onboarding units picker (metric vs imperial) works again; the two alarm entries in Settings are tidied into one place; the calibration copy across the app now agrees on one number instead of three; more sports presets (padel, pickleball, martial arts, skiing and more); and a full French translation. (#762, #753, #781, #766, #784, #768, #778)",
+                "**Found one of these still biting you? Use the Test Centre.** Settings has a test mode for each of these areas now. Turn on the one that matches, reproduce it, and export a clean report in one tap, so the next fix is aimed at the exact thing that broke for you.",
+            ]),
         Release(
             version: "7.3.0",
             title: "The Test Centre: help us fix YOUR specific problem",
