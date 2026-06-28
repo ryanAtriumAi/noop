@@ -1,6 +1,7 @@
 package com.noop.ui
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
@@ -72,6 +73,7 @@ import com.noop.analytics.FusionSource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -81,6 +83,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -172,8 +175,9 @@ private enum class Destination(
     }
 }
 
-/** More-page groups, mirroring the iOS More tab exactly: Insights · Body · Data · App. */
-private data class DrawerGroup(val header: String, val items: List<Destination>)
+/** More-page groups, mirroring the iOS More tab exactly: Insights · Body · Data · App. `defaultExpanded`
+ *  mirrors the iOS S2 default: Insights + Body open at rest, Data + App collapsed to just their header. */
+private data class DrawerGroup(val header: String, val items: List<Destination>, val defaultExpanded: Boolean)
 
 // Mirrors the iOS RootTabView `moreTab` grouping + order one-for-one. Today / Trends / Sleep are NOT
 // listed (they're bottom-bar tabs, exactly as on iOS). Android-only screens (Vital Signs, Wake Window,
@@ -182,20 +186,20 @@ private val drawerGroups: List<DrawerGroup> = listOf(
     DrawerGroup("Insights", listOf(
         Destination.InsightsHub, Destination.Intelligence, Destination.Coach,
         Destination.Insights, Destination.Explore, Destination.Compare,
-    )),
+    ), defaultExpanded = true),
     DrawerGroup("Body", listOf(
         Destination.Live, Destination.Workouts, Destination.Health, Destination.VitalSigns,
         Destination.LabBook, Destination.Stress, Destination.Breathe, Destination.Intervals,
         Destination.Rhythm,
-    )),
+    ), defaultExpanded = true),
     DrawerGroup("Data", listOf(
         Destination.FusedRecord, Destination.AppleHealth, Destination.DataSources,
         Destination.BackupSync, Destination.Devices,
-    )),
+    ), defaultExpanded = false),
     DrawerGroup("App", listOf(
         Destination.Automations, Destination.SmartAlarm, Destination.Notifications,
         Destination.Settings, Destination.Support,
-    )),
+    ), defaultExpanded = false),
 )
 
 /**
@@ -448,31 +452,78 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MoreScreen(onNavigate: (String) -> Unit) {
+    // S2 parity: each group's open/closed state, seeded from `defaultExpanded` (Insights + Body open,
+    // Data + App collapsed) so the page reads shorter at rest without dropping a single row.
+    val expanded = remember {
+        androidx.compose.runtime.mutableStateMapOf<String, Boolean>().apply {
+            drawerGroups.forEach { put(it.header, it.defaultExpanded) }
+        }
+    }
     ScreenScaffold(
         title = "More",
         subtitle = "Everything else, one tap away",
     ) {
-        // Mirror the iOS More page: each group is an UPPERCASE overline label over a single grouped
-        // white NoopCard whose rows are tight (accent icon + title + chevron) and separated by inset
-        // hairlines — NOT loose NavigationDrawerItems floating on the bare surface.
+        // Mirror the iOS More page: each group is a tappable UPPERCASE overline header (with a disclosure
+        // chevron) over a single grouped white NoopCard whose rows are tight (accent icon + title +
+        // chevron) and separated by inset hairlines (NOT loose NavigationDrawerItems on the bare surface).
         drawerGroups.forEach { group ->
+            val isOpen = expanded[group.header] ?: group.defaultExpanded
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Overline(group.header, color = Palette.textTertiary)
-                NoopCard(padding = 0.dp) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        group.items.forEachIndexed { i, dest ->
-                            MoreRow(dest = dest, onClick = { onNavigate(dest.route) })
-                            if (i < group.items.lastIndex) {
-                                HorizontalDivider(
-                                    color = Palette.hairline,
-                                    modifier = Modifier.padding(start = 50.dp),
-                                )
+                MoreGroupHeader(
+                    title = group.header,
+                    expanded = isOpen,
+                    onToggle = { expanded[group.header] = !isOpen },
+                )
+                if (isOpen) {
+                    NoopCard(padding = 0.dp) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            group.items.forEachIndexed { i, dest ->
+                                MoreRow(dest = dest, onClick = { onNavigate(dest.route) })
+                                if (i < group.items.lastIndex) {
+                                    HorizontalDivider(
+                                        color = Palette.hairline,
+                                        modifier = Modifier.padding(start = 50.dp),
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** A tappable group header for the More page (S2): the same UPPERCASE [Overline] label as before, now
+ *  with a trailing chevron that rotates between open (0deg) and closed (-90deg), mirroring the iOS
+ *  collapsible More sections. Tapping toggles the group; the whole row is the tap target. */
+@Composable
+private fun MoreGroupHeader(title: String, expanded: Boolean, onToggle: () -> Unit) {
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else -90f,
+        animationSpec = tween(durationMillis = 240, easing = NavEasing),
+        label = "moreGroupChevron",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onToggle)
+            .semantics {
+                contentDescription = title
+                stateDescription = if (expanded) "Expanded" else "Collapsed"
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Overline(title, modifier = Modifier.weight(1f), color = Palette.textTertiary)
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = Palette.textTertiary,
+            modifier = Modifier
+                .size(Metrics.iconSmall)
+                .rotate(rotation),
+        )
     }
 }
 

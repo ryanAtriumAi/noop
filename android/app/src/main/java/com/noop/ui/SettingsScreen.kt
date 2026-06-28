@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
@@ -75,11 +77,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -319,6 +323,15 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
     // tap-through. Mirrors the macOS StepsCalibrationSheet: honest explainer + current fit + a recent
     // estimated-vs-phone table + a manual coefficient override. Full-screen Dialog like the guide above.
     var showStepsCalibration by remember { mutableStateOf(false) }
+
+    // Whether the "Advanced" disclosure (experimental probes, diagnostics, raw-sensor export, Trends
+    // report) is expanded. Default FALSE so a first-run user lands on the everyday sections instead of
+    // the full wall of cards (S3); nothing is removed, every section stays one tap away by expanding.
+    // Persisted to the same key the iOS @AppStorage uses ("noop.settingsAdvancedOpen"); SharedPreferences
+    // isn't reactive, so the Switch-style toggle drives a local state that writes straight through.
+    var advancedOpen by remember {
+        mutableStateOf(SettingsDisclosurePrefs.read(NoopPrefs.of(context)))
+    }
 
     // EXPERIMENTAL WHOOP 5/MG protocol probes (off by default). Mirrors the macOS @AppStorage toggle;
     // SharedPreferences isn't reactive, so the Switch drives a local mutableState that the store reads.
@@ -1155,6 +1168,17 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
             }
         }
 
+        // Lower-frequency sections collapse behind a single default-closed disclosure (S3) so the
+        // screen opens at the everyday handful instead of the full wall of cards. Nothing is removed;
+        // the experimental probes, diagnostics, raw-capture export and Trends report all stay one tap
+        // away. Mirrors the iOS SettingsView "Advanced" disclosure and the Test Centre Advanced group.
+        SettingsDisclosure(
+            title = "Advanced",
+            subtitle = "Experimental probes, diagnostics, raw-sensor export, and the Trends report. Tucked away to keep the everyday screen tidy.",
+            expanded = advancedOpen,
+            onToggle = { advancedOpen = !advancedOpen; SettingsDisclosurePrefs.write(NoopPrefs.of(context), advancedOpen) },
+        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(Metrics.screenRowSpacing)) {
         // --- Experimental · WHOOP 5 / MG --- (hidden when the user is confidently on a 4.0, #22)
         if (showFiveMGControls) {
         SettingsSection(
@@ -1551,6 +1575,8 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
         // --- Trends report (#436) — shareable offline PDF over a date range. Self-contained
         // card (its own NoopCard + range picker + CTA), so it drops in without a SettingsSection wrapper.
         TrendsReportExportSection(vm)
+        } // end Advanced disclosure content Column
+        } // end SettingsDisclosure("Advanced")
 
         // --- Health & wellness (v5 opt-in toggles) ---
         SettingsSection(
@@ -2351,6 +2377,73 @@ private val SEX_OPTIONS = listOf(
     SexOption("female", "Female"),
     SexOption("nonbinary", "Non-binary"),
 )
+
+// MARK: - Advanced disclosure persistence (S3)
+
+/**
+ * The persisted open/closed state of the Settings "Advanced" disclosure. Keyed identically to the iOS
+ * `@AppStorage("settingsAdvancedOpen")` (here under the `noop.` SharedPreferences namespace), and it
+ * DEFAULTS to false so a first-run user lands collapsed. Pulled out so the default is a single testable
+ * fact: a regression that ships it defaulting open would dump the full wall of cards on first run again.
+ */
+internal object SettingsDisclosurePrefs {
+    const val KEY = "noop.settingsAdvancedOpen"
+    const val DEFAULT_OPEN = false
+
+    fun read(prefs: SharedPreferences): Boolean = prefs.getBoolean(KEY, DEFAULT_OPEN)
+    fun write(prefs: SharedPreferences, open: Boolean) { prefs.edit().putBoolean(KEY, open).apply() }
+}
+
+// MARK: - Advanced disclosure (S3, ports SettingsView's SettingsDisclosureGroup)
+
+/**
+ * A collapsible group that tucks the lower-frequency settings sections behind one tap. It is NOT a
+ * section card itself (the cards it wraps keep their own [SettingsSection] chrome). It's a header row
+ * plus a default-collapsed reveal, modelled on the Test Centre "Advanced" group. Nothing is removed:
+ * collapsed simply means the wrapped sections aren't composed until the row is tapped open. A custom
+ * header (not Material's ExposedDropdown / accordion) keeps it on NOOP's near-black instrument look.
+ */
+@Composable
+private fun SettingsDisclosure(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 0f else -90f,
+        label = "advancedChevron",
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(Metrics.screenRowSpacing)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClick = onToggle)
+                .semantics {
+                    contentDescription = title
+                    stateDescription = if (expanded) "Expanded" else "Collapsed"
+                },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = NoopType.title2, color = Palette.textPrimary)
+                Text(subtitle, style = NoopType.subhead, color = Palette.textSecondary)
+            }
+            Icon(
+                Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = Palette.textTertiary,
+                modifier = Modifier.size(22.dp).rotate(chevronRotation),
+            )
+        }
+        if (expanded) {
+            content()
+        }
+    }
+}
 
 // MARK: - Section card (ports SettingsView's private SettingsSection)
 

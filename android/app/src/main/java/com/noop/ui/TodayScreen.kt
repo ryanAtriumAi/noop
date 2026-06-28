@@ -439,6 +439,17 @@ fun TodayScreen(
         guideSection = section
         showGuide = true
     }
+    // A1 (#514/#706): the Charge breakdown sheet, opened by tapping the hero Charge ring. Hosts the
+    // existing RecoveryDriversSection (gated to the calibration countdown when the night can't score) plus
+    // the folded Readiness card (S4). Not persisted, so it reopens closed. Mirrors iOS showChargeBreakdown.
+    var showChargeBreakdown by remember { mutableStateOf(false) }
+    // S4: the Synthesis card collapses to a one-liner that expands on tap (default collapsed). Mirrors iOS.
+    var synthesisExpanded by remember { mutableStateOf(false) }
+    // S5: the Key Metrics grid caps at the first METRICS_COLLAPSED_CAP tiles behind a "Show all metrics"
+    // expander, and the Data Sources footer collapses to a single "Synced from: ..." line. Both default
+    // collapsed and are NOT persisted, so the home screen reopens compact. Mirrors iOS.
+    var metricsExpanded by remember { mutableStateOf(false) }
+    var sourcesExpanded by remember { mutableStateOf(false) }
     var scoringCardSeen by remember { mutableStateOf(ScoringGuidePrefs.cardSeen(context)) }
     val dismissScoringCard: () -> Unit = {
         ScoringGuidePrefs.setCardSeen(context)
@@ -915,6 +926,7 @@ fun TodayScreen(
                 chargeProvenance = chargeProvenance,
                 restProvenance = restProvenance,
                 onScoreInfo = openGuide,
+                onChargeTap = { showChargeBreakdown = true },
             )
         }
         }
@@ -968,6 +980,10 @@ fun TodayScreen(
                 day = displayMetric,
                 recoveryCalibration = recoveryCalibration,
                 carriedDay = lastScoredRecoveryDay,
+                days = days,
+                synthesisExpanded = synthesisExpanded,
+                onToggleSynthesis = { synthesisExpanded = !synthesisExpanded },
+                onOpenReadiness = { showChargeBreakdown = true },
             )
         }
         }
@@ -1021,21 +1037,10 @@ fun TodayScreen(
         }
         }
 
-        // WHAT SHAPED IT: the engine-computed Charge driver breakdown (one signed-points row per real
-        // term, value vs personal baseline, plus the surfaced confidence dot + tier). Sits directly under
-        // the Charge ring, above the typical-range Contributors bars. Hidden when the day can't score.
-        // Carries the last scored day at the rollover so it matches the carried ring (#543).
-        item { RecoveryDriversSection(days = days, displayDay = displayMetric, carriedDay = lastScoredRecoveryDay) }
-
-        // CONTRIBUTORS (README screen #5, recovery detail) — what drove today's Charge, as labelled
-        // progress bars (HRV / Resting HR / Sleep / Respiratory) in the shared stage/zone bar style.
-        // Carries the last scored day at the rollover so the bars don't all read "No Data" (#543).
-        item { RecoveryContributorsSection(day = displayMetric, carriedDay = lastScoredRecoveryDay) }
-
-        // READINESS — on-device training-readiness synthesis (HRV / resting-HR / load).
-        // Mirrors the macOS readinessSection: rendered only once there's enough history. When today isn't
-        // scored yet, anchor on the last scored day (#543) so the card doesn't vanish at the rollover.
-        if (selectedDayOffset == 0) item { ReadinessSection(days, carriedDay = lastScoredRecoveryDay) }
+        // A1/S4: the WHAT SHAPED IT breakdown, the Contributors bars and the READINESS card all folded into
+        // the Charge-ring TAP (the showChargeBreakdown dialog below), collapsing the home screen. They are
+        // NOT deleted, only moved behind a tap; a one-word readiness read (Push / Maintain / Rest, #205)
+        // stays on the hero via SynthesisHeroCard. Mirrors the iOS chargeBreakdownSheet + readiness fold.
 
         // METRICS — uniform tile grid (two columns), each tile with a 14-day sparkline.
         // #765: no ad-hoc Spacer row before this header. The lone `selectorTopUp` spacer here (a device the
@@ -1087,6 +1092,8 @@ fun TodayScreen(
                 enabledMetrics = enabledKeyMetrics,
                 isToday = selectedDayOffset == 0,
                 onScoreInfo = openGuide,
+                metricsExpanded = metricsExpanded,
+                onToggleMetrics = { metricsExpanded = !metricsExpanded },
             )
         }
         }
@@ -1119,6 +1126,8 @@ fun TodayScreen(
                 footer,
                 strapBatteryPct = if (liveSnap.connected) liveSnap.batteryPct?.roundToInt() else null,
                 strapBatteryEstimate = if (liveSnap.connected) batteryEstimateText else null,
+                expanded = sourcesExpanded,
+                onToggle = { sourcesExpanded = !sourcesExpanded },
             )
         }
     }
@@ -1136,6 +1145,25 @@ fun TodayScreen(
                     initialSection = guideSection,
                 )
             }
+        }
+    }
+
+    // A1/S4: the Charge breakdown sheet, opened by tapping the hero Charge ring. A full-screen Dialog
+    // (mirroring the scoring guide's presentation) hosting the existing What-shaped-it breakdown, the
+    // Contributors bars and the Readiness card, built only when shown (#819 lazy). A calibrating night
+    // (empty drivers) falls through to the existing countdown inside RecoveryDriversSection's own gate.
+    if (showChargeBreakdown) {
+        Dialog(
+            onDismissRequest = { showChargeBreakdown = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            ChargeBreakdownSheet(
+                days = days,
+                displayDay = displayMetric,
+                carriedDay = lastScoredRecoveryDay,
+                showReadiness = selectedDayOffset == 0,
+                onClose = { showChargeBreakdown = false },
+            )
         }
     }
 
@@ -1676,6 +1704,9 @@ private fun ScoreHeroRow(
     chargeProvenance: String? = null,
     restProvenance: String? = null,
     onScoreInfo: (ScoreSection) -> Unit,
+    // A1 (#514/#706): tapping the Charge ring opens the breakdown sheet. A small chevron cue overlays the
+    // ring's bottom edge INSIDE the ring frame, so it adds no stacked height (the #762 self-sizing parity).
+    onChargeTap: (() -> Unit)? = null,
 ) {
     val recovery = day?.recovery
     // Prefer the live in-progress Effort for today, but never BELOW the day's already-earned strain
@@ -1719,6 +1750,7 @@ private fun ScoreHeroRow(
                     domain = DomainTheme.Charge,
                     onInfo = { onScoreInfo(ScoreSection.CHARGE) },
                     provenance = chargeProvenance,
+                    onRingTap = onChargeTap,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         GlowRing(
@@ -1730,6 +1762,9 @@ private fun ScoreHeroRow(
                             showsLabel = recovery != null,
                         )
                         if (recovery == null) RingEmptyOverlay(recoveryCalibration, lastScoredCharge, diameter = ring)
+                        // A1: the "tap me" chevron cue, pinned to the ring's bottom edge INSIDE the ring box
+                        // (BottomCenter + a downward offset) so it never adds to the column's stacked height.
+                        if (onChargeTap != null) RingTapCue(modifier = Modifier.align(Alignment.BottomCenter))
                     }
                 }
                 // EFFORT — strain on the gauge, on the user's selected scale.
@@ -1784,13 +1819,27 @@ private fun HeroRingColumn(
     domain: DomainTheme,
     onInfo: () -> Unit,
     provenance: String? = null,
+    // A1: when non-null (Charge), the ring is tappable and opens the breakdown sheet. The chevron cue is
+    // overlaid by the caller INSIDE the ring box so it adds no stacked height (#762 self-sizing parity).
+    onRingTap: (() -> Unit)? = null,
     ring: @Composable () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ring()
+        if (onRingTap != null) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(
+                        onClickLabel = "See what shaped your ${domain.label}",
+                        onClick = onRingTap,
+                    ),
+            ) { ring() }
+        } else {
+            ring()
+        }
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
@@ -1820,6 +1869,33 @@ private fun HeroRingColumn(
 }
 
 /**
+ * A1: the small "tap me" chevron cue overlaid on the tappable Charge ring. A near-black circular chip with
+ * a down-chevron tinted to the Charge world, sat at the ring's bottom edge INSIDE the ring box (so it adds
+ * no stacked height, the #762 self-sizing parity). Decorative: the ring's own click label carries the
+ * action, so this is hidden from accessibility. Mirrors the iOS ringTapCue.
+ */
+@Composable
+private fun RingTapCue(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .offset(y = 9.dp)
+            .size(18.dp)
+            .clip(CircleShape)
+            .background(Palette.surfaceBase)
+            .border(1.dp, DomainTheme.Charge.color.copy(alpha = 0.35f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Decorative: the ring's own click label carries the action, so the cue itself describes nothing.
+        Icon(
+            Icons.Filled.KeyboardArrowDown,
+            contentDescription = null,
+            tint = DomainTheme.Charge.color,
+            modifier = Modifier.size(12.dp),
+        )
+    }
+}
+
+/**
  * The plain-English Synthesis card — the Charge-tinted [InsightCard] read-out under the ring hero, with a
  * WHITE headline (the key iOS Design-Reset change — `statusColor: textPrimary`, not the recovery/charge
  * colour), carrying the greeting + the SOLID / CALIBRATING data-confidence pill in its top-right. Mirrors
@@ -1830,6 +1906,13 @@ private fun SynthesisHeroCard(
     day: DailyMetric?,
     recoveryCalibration: Int?,
     carriedDay: DailyMetric? = null,
+    // S4: the day history (for the one-word readiness read), whether the Synthesis card is expanded, and the
+    // taps to toggle it / open the Charge breakdown (where the full Readiness card lives). Defaults keep old
+    // call sites compiling; the Today call site supplies them.
+    days: List<DailyMetric> = emptyList(),
+    synthesisExpanded: Boolean = true,
+    onToggleSynthesis: () -> Unit = {},
+    onOpenReadiness: () -> Unit = {},
 ) {
     // The row the synthesis reads from: today's own when it carries recovery, else the carried-over last
     // scored day (#543) so the card mirrors the carried Charge ring instead of blanking to "No Data". When
@@ -1859,7 +1942,17 @@ private fun SynthesisHeroCard(
                 modifier = Modifier.weight(1f, fill = false),
             )
             Spacer(Modifier.weight(1f))
-            // SOLID only when TODAY's own row carries a settled recovery — a carried prior-day read is
+            // S4 (#205): the one-word readiness read kept on the hero now the full Readiness card folded
+            // into the Charge-ring tap. Push / Maintain / Rest; hidden when there isn't enough history.
+            // Tapping it opens the Charge breakdown, where the full Readiness card now lives.
+            val readinessLevel = remember(days) {
+                if (days.isEmpty()) ReadinessEngine.Level.INSUFFICIENT
+                else ReadinessEngine.evaluate(days, today = logicalDayKeyNow()).level
+            }
+            readinessWord(readinessLevel)?.let { word ->
+                ReadinessHeroPill(word = word, level = readinessLevel, onTap = onOpenReadiness)
+            }
+            // SOLID only when TODAY's own row carries a settled recovery, a carried prior-day read is
             // honestly still CALIBRATING for today, matching the iOS pill (keyed on displayDay.recovery).
             val todayRecovery = day?.recovery
             StatePill(
@@ -1867,32 +1960,83 @@ private fun SynthesisHeroCard(
                 tone = if (todayRecovery != null) StrandTone.Accent else StrandTone.Neutral,
             )
         }
-        InsightCard(
-            modifier = Modifier.fillMaxWidth(),
-            category = "Synthesis",
-            status = if (recoveryCalibration != null) "Calibrating" else synthesisWord(recovery),
-            detail = if (recoveryCalibration != null) {
-                // Comma (not the old em-dash) to match the Swift canonical synthesis copy VERBATIM
-                // (TodayView "Learning your baseline, N of M nights.") and the no-em-dash standing rule.
-                "Learning your baseline, $recoveryCalibration of ${Baselines.minNightsSeed} nights."
-            } else if (carriedDay != null) {
-                // Carried prior-day read — summarise that day + stamp it so it isn't passed off as today's.
-                synthesisDetail(carriedDay) + " ${carriedCaption(carriedDay.day)}."
-            } else {
-                synthesisDetail(day)
-            },
-            // The SYNTHESIS headline reads WHITE (textPrimary), not the recovery/charge colour — the key
-            // iOS Design-Reset change (TodayView.synthesisSection passes `statusColor: textPrimary`).
-            statusColor = Palette.textPrimary,
-            // FLAT card to match iOS: the iOS FrostedCardSurface was design-reset so even a tinted card is a
-            // plain `surfaceRaised` fill with NO navy-bevel gradient and NO border (StrandCard.swift) — so
-            // the Synthesis InsightCard reads identical to every other card on the page. Android's tinted
-            // path still draws the old navy-bevel + hue-biased border, which is exactly why the Synthesis
-            // card looked different here. Passing tint = null routes it to the neutral FLAT surfaceRaised +
-            // plain hairline path (Components.kt frostedCardSurface), removing the green gradient wash and
-            // the border. Identity now comes from the white headline alone, matching iOS.
-            tint = null,
-        )
+        // S4: the Synthesis card collapses to a one-liner that expands on tap. The headline (the status) is
+        // the SAME in both states, only the detail body and chrome fold, never the read (#506).
+        val status = if (recoveryCalibration != null) "Calibrating" else synthesisWord(recovery)
+        val detail = if (recoveryCalibration != null) {
+            // Comma (not the old em-dash) to match the Swift canonical synthesis copy VERBATIM
+            // (TodayView "Learning your baseline, N of M nights.") and the no-em-dash standing rule.
+            "Learning your baseline, $recoveryCalibration of ${Baselines.minNightsSeed} nights."
+        } else if (carriedDay != null) {
+            // Carried prior-day read, summarise that day + stamp it so it isn't passed off as today's.
+            synthesisDetail(carriedDay) + " ${carriedCaption(carriedDay.day)}."
+        } else {
+            synthesisDetail(day)
+        }
+        if (synthesisExpanded) {
+            Box(modifier = Modifier.clickable(onClickLabel = "Collapse", onClick = onToggleSynthesis)) {
+                InsightCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    category = "Synthesis",
+                    status = status,
+                    detail = detail,
+                    // The SYNTHESIS headline reads WHITE (textPrimary), not the recovery/charge colour, the
+                    // key iOS Design-Reset change (TodayView.synthesisSection passes statusColor textPrimary).
+                    statusColor = Palette.textPrimary,
+                    // FLAT card to match iOS (no navy-bevel gradient / border): identity comes from the white
+                    // headline alone. tint = null routes to the neutral FLAT surfaceRaised + hairline path.
+                    tint = null,
+                )
+            }
+        } else {
+            // Collapsed: a one-liner with the SYNTHESIS overline, the status headline and a down-chevron.
+            NoopCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = "Expand for the full read", onClick = onToggleSynthesis),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("SYNTHESIS", style = NoopType.overline, color = Palette.textTertiary)
+                        Text(
+                            status,
+                            style = NoopType.headline,
+                            color = Palette.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Palette.textTertiary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * S4 (#205): the one-word readiness pill on the hero (Push / Maintain / Rest). A small tinted capsule
+ * matching the score-pill chrome, coloured by the readiness level; tapping opens the Charge breakdown sheet
+ * where the full Readiness card lives. Mirrors the iOS readinessHeroPill.
+ */
+@Composable
+private fun ReadinessHeroPill(word: String, level: ReadinessEngine.Level, onTap: () -> Unit) {
+    val tone = readinessColor(level)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tone.copy(alpha = 0.12f))
+            .border(1.dp, tone.copy(alpha = 0.32f), RoundedCornerShape(50))
+            .clickable(onClickLabel = "See your full readiness", onClick = onTap)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .semantics { contentDescription = "Readiness: $word" },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(word.uppercase(), style = NoopType.overline, color = tone)
     }
 }
 
@@ -2482,6 +2626,59 @@ private fun DashboardCardsEditorDialog(
 
 /** One row's working state in the dashboard editor: the card + whether it's currently enabled. */
 private data class EditableDashboardCard(val card: DashboardCard, val enabled: Boolean)
+
+/**
+ * A1/S4: the Charge breakdown sheet opened by tapping the hero Charge ring. A full-screen surface with a
+ * titled top bar (Close) and a scrollable body hosting the existing What-shaped-it breakdown, the
+ * Contributors bars and (S4) the folded Readiness card. Built only when shown (the caller gates on
+ * showChargeBreakdown), so the heavy rows materialise on tap (#819). Nothing is recomputed here, it reuses
+ * the existing sections, which read the SAME carried/today row the ring shows. Mirrors iOS chargeBreakdownSheet.
+ */
+@Composable
+private fun ChargeBreakdownSheet(
+    days: List<DailyMetric>,
+    displayDay: DailyMetric?,
+    carriedDay: DailyMetric?,
+    showReadiness: Boolean,
+    onClose: () -> Unit,
+) {
+    Surface(modifier = Modifier.fillMaxSize(), color = Palette.surfaceBase) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Metrics.screenPadding, vertical = Metrics.gap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "What shaped your Charge",
+                    style = NoopType.headline,
+                    color = Palette.textPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close", tint = Palette.textSecondary)
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Metrics.screenPadding)
+                    .padding(bottom = Metrics.sectionGap),
+                verticalArrangement = Arrangement.spacedBy(Metrics.sectionGap),
+            ) {
+                // The breakdown self-gates: a calibrating night (empty drivers) renders nothing here, the
+                // Contributors + Readiness below still give an honest read, never a blank sheet.
+                RecoveryDriversSection(days = days, displayDay = displayDay, carriedDay = carriedDay)
+                RecoveryContributorsSection(day = displayDay, carriedDay = carriedDay)
+                // S4: the SEPARATE Readiness block now lives here behind the Charge-ring tap (today-only,
+                // matching the old inline gate). A one-word read (Push / Maintain / Rest) stays on the hero.
+                if (showReadiness) ReadinessSection(days, carriedDay = carriedDay)
+            }
+        }
+    }
+}
 
 // MARK: - "What shaped it" the engine-computed Charge driver breakdown
 //
@@ -3171,6 +3368,11 @@ private fun MetricGrid(
     enabledMetrics: List<KeyMetric> = KeyMetric.defaultOrder,
     isToday: Boolean = false,
     onScoreInfo: (ScoreSection) -> Unit = {},
+    // S5: cap the grid to the first METRICS_COLLAPSED_CAP tiles behind a "Show all metrics" expander,
+    // collapsing OVERFLOW only (never dropping or reordering a user-selected tile, #251). Defaults keep the
+    // grid fully expanded for any caller that doesn't opt into the cap.
+    metricsExpanded: Boolean = true,
+    onToggleMetrics: () -> Unit = {},
 ) {
     // The "Last night · <date>" caption carried recovery-vital tiles show in place of their unit when
     // they're showing the prior scored day's value (#543); null when not carrying. Mirrors iOS.
@@ -3356,7 +3558,11 @@ private fun MetricGrid(
     )
 
     // Resolve the enabled tiles to their builders, dropping any unknown key defensively.
-    val tiles = enabledMetrics.mapNotNull { builders[it] }
+    val allTiles = enabledMetrics.mapNotNull { builders[it] }
+    // S5: slice from the FRONT of the saved order so a pinned/selected tile is never dropped or reordered
+    // (#251); only the tail folds behind the expander. Mirrors the iOS visibleKeyMetrics prefix(cap).
+    val hasOverflow = allTiles.size > METRICS_COLLAPSED_CAP
+    val tiles = if (metricsExpanded || !hasOverflow) allTiles else allTiles.take(METRICS_COLLAPSED_CAP)
 
     // Two-column grid built from rows so tile heights stay uniform (mirrors the
     // macOS adaptive grid; a fixed 2-up layout reads well on phone widths).
@@ -3365,6 +3571,27 @@ private fun MetricGrid(
             Row(horizontalArrangement = Arrangement.spacedBy(Metrics.gap)) {
                 rowTiles.forEach { tile -> tile(Modifier.weight(1f)) }
                 if (rowTiles.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+        // S5: the "Show all metrics" / "Show fewer" expander. Toggles visibility only, never WHICH tiles
+        // are enabled or their order (that stays the #251 editor's job). Mirrors iOS metricsExpander.
+        if (hasOverflow) {
+            val hidden = allTiles.size - METRICS_COLLAPSED_CAP
+            TextButton(
+                onClick = onToggleMetrics,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.textButtonColors(contentColor = Palette.accent),
+            ) {
+                Text(
+                    if (metricsExpanded) "Show fewer" else "Show all metrics ($hidden)",
+                    style = NoopType.footnote,
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    if (metricsExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
     }
@@ -3896,16 +4123,67 @@ private fun TodaySourcesSection(
     footer: TodayFooterState,
     strapBatteryPct: Int? = null,
     strapBatteryEstimate: String? = null,
+    // S5: collapse to a single "Synced from: ..." summary line by default; tapping expands the full
+    // per-source rows + strap battery inline. Nothing is removed, only folded behind a tap.
+    expanded: Boolean = true,
+    onToggle: () -> Unit = {},
 ) {
     SectionHeader("Data Sources", overline = "Provenance")
+    val whoopPresent = (footer.whoopDays ?: 0) > 0 || strapBatteryPct != null
+    val applePresent = (footer.appleDays ?: 0) > 0 || (footer.appleWorkouts ?: 0) > 0
+    val hcPresent = (footer.hcDays ?: 0) > 0 || (footer.hcWorkouts ?: 0) > 0
+    if (!expanded) {
+        // Collapsed: one tappable "Synced from: ..." line. Health Connect folds under the "Apple Watch"
+        // bucket in the summary (both are the phone's health store to the audience); the expanded card
+        // still lists every source by name, so no provenance detail is lost.
+        NoopCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Show what NOOP is synced from", onClick = onToggle),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    syncedFromSummary(hasWhoop = whoopPresent, hasApple = applePresent || hcPresent, hasXiaomi = false),
+                    style = NoopType.subhead,
+                    color = Palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Palette.textTertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+        return
+    }
     NoopCard {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // A header row to collapse it back, an obvious "less" cue on the expanded card.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClickLabel = "Hide data source detail", onClick = onToggle),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Synced from", style = NoopType.overline, color = Palette.textTertiary, modifier = Modifier.weight(1f))
+                Icon(
+                    Icons.Filled.KeyboardArrowUp,
+                    contentDescription = null,
+                    tint = Palette.textTertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Palette.hairline))
             SourceRow(
                 badge = "Whoop",
                 tint = Palette.accent,
                 // A live battery reading means the strap IS connected, even before the first banked
-                // night — don't contradict it with "Not connected" (#159).
-                present = (footer.whoopDays ?: 0) > 0 || strapBatteryPct != null,
+                // night, don't contradict it with "Not connected" (#159).
+                present = whoopPresent,
                 detail = countDetail(footer.whoopDays, footer.whoopWorkouts, "workouts"),
                 batteryPct = strapBatteryPct,
                 batteryEstimate = strapBatteryEstimate,
@@ -3919,7 +4197,7 @@ private fun TodaySourcesSection(
             SourceRow(
                 badge = "Apple Health",
                 tint = Palette.metricCyan,
-                present = (footer.appleDays ?: 0) > 0 || (footer.appleWorkouts ?: 0) > 0,
+                present = applePresent,
                 detail = countDetail(footer.appleDays, footer.appleWorkouts, "workouts"),
             )
             Box(
@@ -3931,7 +4209,7 @@ private fun TodaySourcesSection(
             SourceRow(
                 badge = "Health Connect",
                 tint = Palette.metricPurple,
-                present = (footer.hcDays ?: 0) > 0 || (footer.hcWorkouts ?: 0) > 0,
+                present = hcPresent,
                 detail = countDetail(footer.hcDays, footer.hcWorkouts, "workouts"),
             )
         }
@@ -4082,6 +4360,37 @@ private fun ReadinessSection(days: List<DailyMetric>, carriedDay: DailyMetric? =
         }
     }
 }
+
+/**
+ * S4 (#205): the one-word readiness read kept on the hero (Push / Maintain / Rest) now the full Readiness
+ * card folded into the Charge-ring tap. PURE mapping of the existing [ReadinessEngine.Level]; INSUFFICIENT
+ * returns null (the hero then shows no word, matching the old card hiding itself). Byte-identical twin of
+ * the Swift TodayView.readinessWord.
+ */
+internal fun readinessWord(level: ReadinessEngine.Level): String? = when (level) {
+    ReadinessEngine.Level.PRIMED -> "Push"
+    ReadinessEngine.Level.BALANCED -> "Maintain"
+    ReadinessEngine.Level.STRAINED -> "Rest"
+    ReadinessEngine.Level.RUNDOWN -> "Rest"
+    ReadinessEngine.Level.INSUFFICIENT -> null
+}
+
+/**
+ * S5: the collapsed Data Sources footer summary, "Synced from: WHOOP, Apple Watch", listing only sources
+ * with data (Apple Health reads as "Apple Watch", the device the audience knows), or "No sources yet".
+ * PURE + unit-tested. Byte-identical twin of the Swift TodayView.syncedFromSummary.
+ */
+internal fun syncedFromSummary(hasWhoop: Boolean, hasApple: Boolean, hasXiaomi: Boolean): String {
+    val names = buildList {
+        if (hasWhoop) add("WHOOP")
+        if (hasApple) add("Apple Watch")
+        if (hasXiaomi) add("Mi Band")
+    }
+    return if (names.isEmpty()) "No sources yet" else "Synced from: " + names.joinToString(", ")
+}
+
+/** S5: the Key-Metric overflow cap, mirroring TodayView.metricsCollapsedCap (two columns, three rows). */
+internal const val METRICS_COLLAPSED_CAP = 6
 
 /** Level → color, mirroring TodayView.readinessColor. */
 private fun readinessColor(level: ReadinessEngine.Level): Color = when (level) {

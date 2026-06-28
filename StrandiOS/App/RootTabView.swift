@@ -21,6 +21,10 @@ struct RootTabView: View {
     /// Selected tab — bound so tab switches can crossfade (README §Motion: ~240ms opacity swap
     /// between tab roots, calm easing). Defaults to Today.
     @State private var selectedTab: Int = 0
+    /// Which More-tab groups are expanded (S2). Insights + Body stay open at rest; Data + App collapse to
+    /// just their header until tapped, so the More list reads shorter without losing a single row. Keyed
+    /// by the section title so the set survives view rebuilds.
+    @State private var expandedMoreSections: Set<String> = ["Insights", "Body"]
 
     init() {
         // Plain Titanium bar: pin the background to `surfaceBase` and clear the system
@@ -280,28 +284,53 @@ struct RootTabView: View {
         .tabItem { Label("More", systemImage: "ellipsis.circle.fill") }
     }
 
-    /// One titled group in the More index: the app's `SectionHeader` overline (UPPERCASE) over a single
-    /// grouped container whose rows are separated by hairlines — the same idiom Settings/Health use to group
-    /// rows (a `NoopCard` holding a `VStack(spacing: 0)`). Each `MoreRow` draws its own bottom hairline; the
-    /// container clips the column to the card's rounded shape so the final row's divider is trimmed inside
-    /// the corners, leaving dividers only *between* rows.
+    /// One titled, COLLAPSIBLE group in the More index (S2): the app's overline (UPPERCASE) becomes a
+    /// tappable header with a disclosure chevron; tapping it expands/collapses the grouped rows card.
+    /// Insights + Body default open, Data + App default collapsed (the `expandedMoreSections` seed) so the
+    /// list is shorter at rest without dropping a single row. The grouped card is unchanged: a single
+    /// `NoopCard` holding a `VStack(spacing: 0)` whose `MoreRow`s draw their own hairlines, clipped to the
+    /// card's rounded shape so the last divider is trimmed inside the corners. Same idiom Settings/Health use.
     @ViewBuilder
-    private func moreSection<Rows: View>(_ title: LocalizedStringKey,
+    private func moreSection<Rows: View>(_ title: String,
                                          @ViewBuilder rows: @escaping () -> Rows) -> some View {
+        let isOpen = expandedMoreSections.contains(title)
         VStack(alignment: .leading, spacing: 10) {
-            // The app's overline category label (ALL-CAPS, tracked, small) — same style as Sleep's
-            // "LAST NIGHT" and the Android More page's group labels — NOT the big SectionHeader title2.
-            Text(title).strandOverline()
+            // Tappable overline header: the same ALL-CAPS tracked label as before, now with a trailing
+            // chevron that rotates open. A plain Button (not a SwiftUI DisclosureGroup) so the header keeps
+            // the exact strandOverline styling and the card layout below stays identical to before.
+            Button {
+                withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24)) {
+                    if isOpen { expandedMoreSections.remove(title) }
+                    else { expandedMoreSections.insert(title) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(title).strandOverline()
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .rotationEffect(.degrees(isOpen ? 0 : -90))
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            // Zero internal padding so each MoreRow owns its own comfortable insets + height; the rows
-            // supply their own hairline separators (drawn at the bottom of every row but the last via the
-            // divider overlay) so the group reads as one continuous grouped list, matching Settings/Health.
-            NoopCard(padding: 0) {
-                VStack(spacing: 0) { rows() }
-                    // Clip the rows column to the card's rounded shape so the last row's bottom hairline is
-                    // trimmed inside the corners (the card draws its surface in the BACKGROUND and doesn't
-                    // clip content itself, so without this the final divider would run past the rounded edge).
-                    .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(Text(isOpen ? "Expanded" : "Collapsed"))
+            .accessibilityHint(Text(isOpen ? "Double tap to collapse" : "Double tap to expand"))
+
+            if isOpen {
+                // Zero internal padding so each MoreRow owns its own comfortable insets + height; the rows
+                // supply their own hairline separators (drawn at the bottom of every row but the last via the
+                // divider overlay) so the group reads as one continuous grouped list, matching Settings/Health.
+                NoopCard(padding: 0) {
+                    VStack(spacing: 0) { rows() }
+                        // Clip the rows column to the card's rounded shape so the last row's bottom hairline is
+                        // trimmed inside the corners (the card draws its surface in the BACKGROUND and doesn't
+                        // clip content itself, so without this the final divider would run past the rounded edge).
+                        .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+                }
             }
         }
     }
