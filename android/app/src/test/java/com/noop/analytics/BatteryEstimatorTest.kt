@@ -40,6 +40,29 @@ class BatteryEstimatorTest {
         assertEquals(44.0, e.remainingHours, 1e-6)   // 88 / 2
     }
 
+    @Test fun partialTopUpDoesNotInflateDaysLeft() {
+        // #8: a partial top-up must NOT reset the discharge run like a full charge. Buffer is a long clean
+        // discharge 100%->40% over 60h (1 %/h), a quick desk top-up 40->55 at 61h, then 55->53 over 3h. The
+        // old scan anchored the run on the +15pp top-up and fit ~0.67 %/h on the 3h tail, inflating the
+        // estimate. With the near-full guard the top-up is stepped over, the fit prefers the long pre-top-up
+        // segment (1 %/h), and at 53% that is an honest ~53h, not the inflated ~79h.
+        val r = listOf(0L to 100.0, 60 * h to 40.0, 61 * h to 55.0, 64 * h to 53.0)
+        val e = BatteryEstimator.estimate(r, BatteryEstimator.ratedLifeHoursWhoop5)!!
+        assertEquals(BatteryEstimator.Source.MEASURED, e.source)
+        assertEquals(53.0, e.currentSoc, 1e-6)
+        assertEquals(53.0, e.remainingHours, 1e-6)   // 53 / (1 %/h), pre-top-up slope
+    }
+
+    @Test fun nearFullChargeStillResetsTheRun() {
+        // The guard must NOT change a genuine near-full charge: discharge 100->20, charge back to 95 (>=90,
+        // near-full), then 95->85 over 5h is 2 %/h. The run still resets on the near-full charge, source
+        // measured, 85 / 2 = 42.5h. This pins that the near-full anchor still fires (no regression of #713).
+        val r = listOf(0L to 100.0, 8 * h to 20.0, 9 * h to 95.0, 14 * h to 85.0)
+        val e = BatteryEstimator.estimate(r, BatteryEstimator.ratedLifeHoursWhoop5)!!
+        assertEquals(BatteryEstimator.Source.MEASURED, e.source)
+        assertEquals(42.5, e.remainingHours, 1e-6)   // 85 / 2, post-near-full-charge segment
+    }
+
     @Test fun ratedFallbackWhenDropTooSmall() {
         // 100->99 over 10h is a 1% drop, under minDropPct(2), so it falls back to rated instead of
         // reporting a wild ~1000h. The estimate stays anchored to the latest SoC.

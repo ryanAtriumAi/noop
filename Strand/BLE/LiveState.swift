@@ -383,6 +383,26 @@ public final class LiveState: ObservableObject {
         }
     }
 
+    /// Seed the SoC buffer from the persisted battery table on connect/bootstrap (#7). `batterySamples` is
+    /// otherwise fed ONLY by live BLE events (`bankBatterySample`), so after a reconnect the "~X days left"
+    /// estimate restarted from an empty buffer and ignored the long discharge history already on disk.
+    /// Android seeds from its persisted battery table over a 14-day window; iOS/macOS did not, so the two
+    /// platforms diverged. The BLEManager bootstrap path does one async read of the persisted series and
+    /// passes it here. De-dupes against any points already banked from live events this session (by ts) so a
+    /// seed that races a couple of live readings can't double-count them, then re-sorts and caps the buffer.
+    /// Only banks the historical points that aren't already present, so calling it twice is idempotent.
+    public func seedBatterySamples(_ seed: [(ts: Int, soc: Double)]) {
+        guard !seed.isEmpty else { return }
+        let existing = Set(batterySamples.map { $0.ts })
+        let fresh = seed.filter { !existing.contains($0.ts) }
+        guard !fresh.isEmpty else { return }
+        batterySamples.append(contentsOf: fresh)
+        batterySamples.sort { $0.ts < $1.ts }
+        if batterySamples.count > Self.maxBatterySamples {
+            batterySamples.removeFirst(batterySamples.count - Self.maxBatterySamples)
+        }
+    }
+
     /// Drop the banked SoC buffer (called on disconnect) so a stale runtime estimate can't outlive the
     /// link, the twin of the `charging = nil` clear on the same path.
     public func clearBatterySamples() {

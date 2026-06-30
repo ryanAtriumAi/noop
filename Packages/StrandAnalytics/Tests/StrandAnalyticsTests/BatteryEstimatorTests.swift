@@ -37,6 +37,31 @@ final class BatteryEstimatorTests: XCTestCase {
         XCTAssertEqual(e.remainingHours, 44, accuracy: 1e-6)   // 88 / 2
     }
 
+    func testPartialTopUpDoesNotInflateDaysLeft() {
+        // #8: a partial top-up must NOT reset the discharge run like a full charge. Buffer is a long clean
+        // discharge 100%->40% over 60h (1 %/h), a quick desk top-up 40->55 at 61h, then 55->53 over 3h. The
+        // old scan anchored the run on the +15pp top-up and fit ~0.67 %/h on the 3h tail, inflating the
+        // estimate. With the near-full guard the top-up is stepped over, the fit prefers the long pre-top-up
+        // segment (1 %/h), and at 53% that is an honest ~53h, not the inflated ~79h.
+        let e = BatteryEstimator.estimate(
+            samples: [(0, 100), (60 * h, 40), (61 * h, 55), (64 * h, 53)],
+            ratedHours: BatteryEstimator.ratedLifeHoursWhoop5)!
+        XCTAssertEqual(e.source, .measured)
+        XCTAssertEqual(e.currentSoc, 53, accuracy: 1e-6)
+        XCTAssertEqual(e.remainingHours, 53, accuracy: 1e-6)   // 53 / (1 %/h), pre-top-up slope
+    }
+
+    func testNearFullChargeStillResetsTheRun() {
+        // The guard must NOT change a genuine near-full charge: discharge 100->20, charge back to 95 (>=90,
+        // near-full), then 95->85 over 5h is 2 %/h. The run still resets on the near-full charge, source
+        // measured, 85 / 2 = 42.5h. This pins that the near-full anchor still fires (no regression of #713).
+        let e = BatteryEstimator.estimate(
+            samples: [(0, 100), (8 * h, 20), (9 * h, 95), (14 * h, 85)],
+            ratedHours: BatteryEstimator.ratedLifeHoursWhoop5)!
+        XCTAssertEqual(e.source, .measured)
+        XCTAssertEqual(e.remainingHours, 42.5, accuracy: 1e-6)   // 85 / 2, post-near-full-charge segment
+    }
+
     func testRatedFallbackWhenDropTooSmall() {
         // 100->99 over 10h is a 1% drop, under minDropPct(2), so it falls back to rated instead of
         // reporting a wild ~1000h. The estimate stays anchored to the latest SoC.

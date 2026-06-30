@@ -754,6 +754,25 @@ public final class BLEManager: NSObject, ObservableObject {
                 log("Backfill: reject-archive retro-decode deferred (store insert failed) — will retry next launch.")
             }
         }
+
+        // Battery "~X days left" seed (#7): `LiveState.batterySamples` is fed ONLY by live BLE events, so
+        // after a reconnect the runtime estimate restarted from an empty buffer and ignored the discharge
+        // history already on disk (Android seeds from its persisted battery table over a 14-day window;
+        // iOS/macOS did not = divergence). Read the persisted SoC series for the active device over the last
+        // 14 days and seed the live buffer once the store is up. The setter de-dupes against any points
+        // already banked from live events this session, so a seed that races the first live reading is safe.
+        // nil-SoC rows are dropped here (the buffer is non-optional %); a read failure is non-fatal, the
+        // estimate just cold-starts as before.
+        let seedNow = Int(Date().timeIntervalSince1970)
+        let fourteenDays = 14 * 24 * 3600
+        if let rows = try? await store.batterySamples(
+            deviceId: deviceId, from: seedNow - fourteenDays, to: seedNow, limit: 2000) {
+            let seed = rows.compactMap { row -> (ts: Int, soc: Double)? in
+                guard let soc = row.soc else { return nil }
+                return (ts: row.ts, soc: soc)
+            }
+            state.seedBatterySamples(seed)
+        }
     }
 
     /// Designated initializer for testing and preview use: accepts a pre-built Collector.
