@@ -424,8 +424,10 @@ class OuraDriver(
         if (frame.subop == 0x28) {
             return SecureRouting.LiveHRPush(frame.subBody)
         }
-        // Enable/subscribe ACKs (0x23 / 0x27) advance the triplet (s5.6).
-        if (frame.subop == 0x23 || frame.subop == 0x27) {
+        // Live-HR enable ACKs advance the triplet (s5.6): 0x21 is the dhr_read feature-read ACK from
+        // step 1 (`2f 06 21 02 01 11 02 00`), 0x23 acks the enable write (step 2), 0x27 acks the
+        // subscribe write (step 3). All three must be recognised or the sequencer stalls at step 0.
+        if (frame.subop == 0x21 || frame.subop == 0x23 || frame.subop == 0x27) {
             return SecureRouting.EnableAck
         }
         return SecureRouting.Unhandled

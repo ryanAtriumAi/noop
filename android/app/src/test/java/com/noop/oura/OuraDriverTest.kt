@@ -254,6 +254,11 @@ class OuraDriverTest {
         val ackFrame = OuraSecureFrame(subop = 0x23, subBody = intArrayOf(0x02, 0x00))
         assertEquals(OuraDriver.SecureRouting.EnableAck, d.handleSecureFrame(ackFrame))
 
+        // s5.6 step 1: the dhr_read feature-read ACK (`2f 06 21 02 01 11 02 00`) is subop 0x21 with body
+        // `02 01 11 02 00`. It must route to EnableAck or the enable triplet stalls at step 0 (#900).
+        val dhrReadAck = OuraSecureFrame(subop = 0x21, subBody = bytes("0201110200"))
+        assertEquals(OuraDriver.SecureRouting.EnableAck, d.handleSecureFrame(dhrReadAck))
+
         // The push subBody is the 14 bytes AFTER `2f 0f 28` from the s5.6 wire frame (IBI at [5..6]).
         val pushBody = bytes("020002000001040000000000007f")
         assertEquals(14, pushBody.size)

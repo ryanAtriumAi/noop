@@ -99,6 +99,12 @@ data class LiveState(
      *  [bonded] can be true while this is false ("Live HR, not fully paired"). WHOOP 4 always reaches a
      *  genuine bond, so the two track together there. Port of macOS LiveState.encryptedBond. */
     val encryptedBond: Boolean = false,
+    /** True ONLY when a non-WHOOP live source (currently the Oura ring) is actively streaming live HR.
+     *  This is the green "streaming" signal for sources with no WHOOP-style encrypted bond: it is
+     *  DELIBERATELY separate from [bonded], which carries WHOOP encrypted-bond + buzz semantics (it gates
+     *  haptics) and must NOT be set by the Oura path. The owning source sets it true in its streaming
+     *  branch and false at every teardown. Twin of macOS LiveState.streamingLiveHR (#903). */
+    val streamingLiveHR: Boolean = false,
     val heartRate: Int? = null,
     val rr: List<Int> = emptyList(),
     /** Rolling UI buffer of recent R-R intervals (capped, oldest dropped first). The standard BLE HR

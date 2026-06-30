@@ -23,6 +23,14 @@ public final class LiveState: ObservableObject {
     /// connect/disconnect. Drives the Live pill's two-state distinction; the encrypted channel (buzz,
     /// alarm, double-tap, history offload) only works when this is true.
     @Published public var encryptedBond: Bool = false
+    /// True ONLY when a non-WHOOP live source (currently the Oura ring) is actively streaming live HR.
+    /// This is the green "STREAMING" signal for sources that have no WHOOP-style encrypted bond: it is
+    /// DELIBERATELY separate from `bonded`, which carries WHOOP encrypted-bond + buzz semantics (it gates
+    /// haptics in AppModel / BreathingView) and must not be set by the Oura path. The menu-bar pill reads
+    /// this to show STREAMING for a live ring while leaving the WHOOP bonded logic untouched. The owning
+    /// source sets it true in its streaming branch and false at every teardown (stop / needs-pairing /
+    /// radio-off / connect-fail / disconnect). Twin of the Android LiveState.streamingLiveHR.
+    @Published public var streamingLiveHR: Bool = false
     @Published public var heartRate: Int? = nil
     /// Whether the heavy R10/R11 realtime burst is currently armed (the "live feed"). Tracks the
     /// realtime INTENT (startRealtime/stopRealtime), NOT `heartRate` — the lightweight 0x2A37 profile
