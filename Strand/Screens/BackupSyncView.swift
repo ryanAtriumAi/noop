@@ -67,8 +67,8 @@ struct BackupSyncView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Backup folder")
                     .font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
-                Text(folderLabel.map { "Saving to: \($0)" }
-                     ?? "No folder chosen yet. Pick one your cloud app already syncs, or any local folder.")
+                Text(folderLabel.map { String(localized: "Saving to: \($0)") }
+                     ?? String(localized: "No folder chosen yet. Pick one your cloud app already syncs, or any local folder."))
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Tip: choose a folder in iCloud Drive and your backups sync to all your Apple devices automatically, no account setup needed.")
@@ -140,10 +140,10 @@ struct BackupSyncView: View {
             await MainActor.run {
                 lastMs = FolderBackup.lastBackupMs
                 busy = false
-                alertTitle = ok ? "Backed up" : "Backup problem"
+                alertTitle = ok ? String(localized: "Backed up") : String(localized: "Backup problem")
                 alertMessage = ok
-                    ? "Saved a backup to your folder."
-                    : "Backup failed - re-pick the folder and try again."
+                    ? String(localized: "Saved a backup to your folder.")
+                    : String(localized: "Backup failed - re-pick the folder and try again.")
                 showAlert = true
             }
         }
@@ -152,8 +152,8 @@ struct BackupSyncView: View {
     private func openRestorePicker() {
         snapshots = FolderBackup.listSnapshots()
         if snapshots.isEmpty {
-            alertTitle = "No backups found"
-            alertMessage = "There are no NOOP backups in your folder yet. Use Back up now first."
+            alertTitle = String(localized: "No backups found")
+            alertMessage = String(localized: "There are no NOOP backups in your folder yet. Use Back up now first.")
             showAlert = true
         } else {
             showRestoreSheet = true
@@ -173,12 +173,12 @@ struct BackupSyncView: View {
                 busy = false
                 switch result {
                 case .imported:
-                    alertTitle = "Restored"
-                    alertMessage = "Fully quit and reopen NOOP to load it."
+                    alertTitle = String(localized: "Restored")
+                    alertMessage = String(localized: "Fully quit and reopen NOOP to load it.")
                 case .failure(let m):
-                    alertTitle = "Restore problem"; alertMessage = m
+                    alertTitle = String(localized: "Restore problem"); alertMessage = m
                 case .cancelled, .exported:
-                    alertTitle = "Restore problem"; alertMessage = "Couldn't restore that backup."
+                    alertTitle = String(localized: "Restore problem"); alertMessage = String(localized: "Couldn't restore that backup.")
                 }
                 showAlert = true
             }
@@ -246,7 +246,8 @@ private struct RestorePickerSheet: View {
 
     /// VoiceOver label: reads the resolved date when we have one, else the filename (no epoch date).
     private func accessibilityLabel(_ snap: FolderBackup.Snapshot) -> String {
-        snap.timeMs > 0 ? "Restore backup from \(absoluteTime(snap.timeMs))" : "Restore backup \(snap.name)"
+        snap.timeMs > 0 ? String(localized: "Restore backup from \(absoluteTime(snap.timeMs))")
+                        : String(localized: "Restore backup \(snap.name)")
     }
 
     private func absoluteTime(_ ms: Int) -> String {

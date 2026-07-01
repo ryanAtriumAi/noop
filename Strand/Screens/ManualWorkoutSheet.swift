@@ -55,16 +55,16 @@ struct ManualWorkoutSheet: View {
         VStack(alignment: .leading, spacing: NoopMetrics.space5) {
             header
             VStack(alignment: .leading, spacing: NoopMetrics.space4) {
-                field("Sport") {
+                field(String(localized: "Sport")) {
                     sportPicker
                 }
-                field("Start") {
+                field(String(localized: "Start")) {
                     DatePicker("", selection: $start, in: ...Date(),
                                displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
                         .accessibilityLabel("Start date and time")
                 }
-                field("Duration") {
+                field(String(localized: "Duration")) {
                     HStack(spacing: 12) {
                         Stepper(value: $durationMin, in: 1...(24 * 60), step: 5) {
                             Text(durationLabel)
@@ -75,18 +75,18 @@ struct ManualWorkoutSheet: View {
                     }
                 }
                 HStack(spacing: 14) {
-                    field("Avg HR") {
-                        numberInput("optional", text: $avgHrText, unit: "bpm", field: .avgHr)
+                    field(String(localized: "Avg HR")) {
+                        numberInput(String(localized: "optional"), text: $avgHrText, unit: "bpm", field: .avgHr)
                             .accessibilityLabel("Average heart rate in beats per minute, optional")
                     }
-                    field("Calories") {
-                        numberInput("optional", text: $kcalText, unit: "kcal", field: .calories)
+                    field(String(localized: "Calories")) {
+                        numberInput(String(localized: "optional"), text: $kcalText, unit: "kcal", field: .calories)
                             .accessibilityLabel("Calories in kilocalories, optional")
                     }
                 }
             }
             if let validationNote { noteRow(validationNote) }
-            if avgHrEditedNote { noteRow("Avg HR is shown as typed. The HR graph, zones and Effort stay from the recorded session.") }
+            if avgHrEditedNote { noteRow(String(localized: "Avg HR is shown as typed. The HR graph, zones and Effort stay from the recorded session.")) }
             footer
         }
         .padding(NoopMetrics.space6)
@@ -284,15 +284,15 @@ struct ManualWorkoutSheet: View {
 
     private var validationNote: String? {
         guard builtRow == nil else { return nil }
-        if sport.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a sport." }
-        if start > Date() { return "Start can't be in the future." }
+        if sport.trimmingCharacters(in: .whitespaces).isEmpty { return String(localized: "Enter a sport.") }
+        if start > Date() { return String(localized: "Start can't be in the future.") }
         if !avgHrText.trimmingCharacters(in: .whitespaces).isEmpty, avgHr == nil || !(25...250).contains(avgHr ?? -1) {
-            return "Average HR must be 25–250 bpm."
+            return String(localized: "Average HR must be 25–250 bpm.")
         }
         if !kcalText.trimmingCharacters(in: .whitespaces).isEmpty, kcal == nil || (kcal ?? -1) < 0 || (kcal ?? 0) > 20_000 {
-            return "Calories must be 0–20,000."
+            return String(localized: "Calories must be 0–20,000.")
         }
-        return "Check the values and try again."
+        return String(localized: "Check the values and try again.")
     }
 
     private func save() {
@@ -338,7 +338,7 @@ struct StartWorkoutSheet: View {
                     Text("Start a workout")
                         .font(StrandFont.title2)
                         .foregroundStyle(StrandPalette.textPrimary)
-                    Text("Pick a sport — NOOP records HR, peak, average and effort from the live feed.")
+                    Text("Pick a sport. NOOP records HR, peak, average and effort from the live feed.")
                         .font(StrandFont.subhead)
                         .foregroundStyle(StrandPalette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

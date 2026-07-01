@@ -192,10 +192,10 @@ struct LiveView: View {
 
     private var headerStats: some View {
         HStack(spacing: 16) {
-            headerStat("Device", activeDeviceName)
-            headerStat("Battery", live.batteryPct.map { "\(Int($0))%" } ?? "—")
-            headerStat("Worn", activeConnection ? (live.worn ? "Yes" : "No") : "—")
-            headerStat("Last sync", lastSyncLabel)
+            headerStat(String(localized: "Device"), activeDeviceName)
+            headerStat(String(localized: "Battery"), live.batteryPct.map { "\(Int($0))%" } ?? "—")
+            headerStat(String(localized: "Worn"), activeConnection ? (live.worn ? String(localized: "Yes") : String(localized: "No")) : "—")
+            headerStat(String(localized: "Last sync"), lastSyncLabel)
         }
     }
 
@@ -240,11 +240,11 @@ struct LiveView: View {
         // over the unbonded standard profile (#69): green "Bonded · streaming" only when encryptedBond,
         // amber "Live HR (not fully paired)" otherwise. The pairingHintBanner below gives the how-to.
         let (label, color): (String, Color) =
-            (activeConnection && live.encryptedBond) ? ("Bonded · streaming", StrandPalette.accent)
-            : activeConnection ? ("Live HR (not fully paired)", StrandPalette.statusWarning)
-            : live.connected ? ("Connected", StrandPalette.statusWarning)
-            : live.encryptedBond ? ("Paired · idle", StrandPalette.statusWarning)
-            : ("Disconnected", StrandPalette.metricRose)
+            (activeConnection && live.encryptedBond) ? (String(localized: "Bonded · streaming"), StrandPalette.accent)
+            : activeConnection ? (String(localized: "Live HR (not fully paired)"), StrandPalette.statusWarning)
+            : live.connected ? (String(localized: "Connected"), StrandPalette.statusWarning)
+            : live.encryptedBond ? (String(localized: "Paired · idle"), StrandPalette.statusWarning)
+            : (String(localized: "Disconnected"), StrandPalette.metricRose)
         return HStack(spacing: 8) {
             Circle().fill(color).frame(width: 9, height: 9)
             Text(label).font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
@@ -368,11 +368,11 @@ struct LiveView: View {
                 // Offline: show a muted "Offline" word (dimmed to textTertiary) instead of three bare
                 // accent-coloured em-dashes that read as broken live readouts. Once there's an active
                 // stream the real values (and their cyan/green/amber accents) return.
-                liveProofMetric("R-R", activeConnection ? rrSummary : "Offline",
+                liveProofMetric("R-R", activeConnection ? rrSummary : String(localized: "Offline"),
                                 StrandPalette.metricCyan, offline: !activeConnection)
-                liveProofMetric("Frame", activeConnection ? (live.lastFrameType ?? "—") : "Offline",
+                liveProofMetric(String(localized: "Frame"), activeConnection ? (live.lastFrameType ?? "—") : String(localized: "Offline"),
                                 StrandPalette.accent, offline: !activeConnection)
-                liveProofMetric("Event", activeConnection ? (live.lastEvent ?? "—") : "Offline",
+                liveProofMetric(String(localized: "Event"), activeConnection ? (live.lastEvent ?? "—") : String(localized: "Offline"),
                                 StrandPalette.statusWarning, offline: !activeConnection)
             }
         }
@@ -398,8 +398,8 @@ struct LiveView: View {
             }
             .accessibilityHidden(true)
             Text(values.isEmpty
-                 ? "Waiting for R-R intervals."
-                 : "Recent intervals: " + values.suffix(5).map(String.init).joined(separator: " · ") + " ms")
+                 ? String(localized: "Waiting for R-R intervals.")
+                 : String(localized: "Recent intervals: \(values.suffix(5).map(String.init).joined(separator: " · ")) ms"))
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .lineLimit(1)
@@ -453,19 +453,19 @@ struct LiveView: View {
     }
 
     private var signalTrustSummary: String {
-        if activeConnection && live.encryptedBond { return "Encrypted stream — deep controls and history sync available." }
-        if activeConnection { return "Live heart rate is flowing; full strap controls need an encrypted bond." }
-        if live.connected { return "Connected, waiting for a streaming state." }
+        if activeConnection && live.encryptedBond { return String(localized: "Encrypted stream: deep controls and history sync available.") }
+        if activeConnection { return String(localized: "Live heart rate is flowing; full strap controls need an encrypted bond.") }
+        if live.connected { return String(localized: "Connected, waiting for a streaming state.") }
         // The actionable "Scan and connect…" CTA now lives in `offlineConnectCallout` above the fold, so
         // this ring caption stays a calm empty-state descriptor rather than a second, competing CTA.
-        return "Live heart rate appears here once a strap is connected."
+        return String(localized: "Live heart rate appears here once a strap is connected.")
     }
 
     private var connectionModeDetail: String {
-        if activeConnection && live.encryptedBond { return "Full strap stream is active." }
-        if activeConnection { return "Heart rate stream is active." }
-        if live.connected { return "Radio connected, stream not yet trusted." }
-        return "No live stream."
+        if activeConnection && live.encryptedBond { return String(localized: "Full strap stream is active.") }
+        if activeConnection { return String(localized: "Heart rate stream is active.") }
+        if live.connected { return String(localized: "Radio connected, stream not yet trusted.") }
+        return String(localized: "No live stream.")
     }
 
     // MARK: - Signal trust
@@ -488,37 +488,37 @@ struct LiveView: View {
 
     private var signalTiles: [SignalTrustTile.Model] {
         [
-            .init(title: "Heart rate",
-                  value: displayHR.map { "\($0) bpm" } ?? "Missing",
-                  detail: activeConnection ? "Streaming now" : "No active stream",
+            .init(title: String(localized: "Heart rate"),
+                  value: displayHR.map { "\($0) bpm" } ?? String(localized: "Missing"),
+                  detail: activeConnection ? String(localized: "Streaming now") : String(localized: "No active stream"),
                   icon: "waveform.path.ecg",
                   tint: displayHR == nil ? StrandPalette.textTertiary : StrandPalette.accent),
-            .init(title: "R-R intervals",
-                  value: live.rrRecent.isEmpty ? "Missing" : "\(live.rrRecent.count) recent",
-                  detail: rollingRMSSD.map { "RMSSD \(Int($0.rounded())) ms" } ?? "Needs interval frames",
+            .init(title: String(localized: "R-R intervals"),
+                  value: live.rrRecent.isEmpty ? String(localized: "Missing") : String(localized: "\(live.rrRecent.count) recent"),
+                  detail: rollingRMSSD.map { String(localized: "RMSSD \(Int($0.rounded())) ms") } ?? String(localized: "Needs interval frames"),
                   icon: "point.3.connected.trianglepath.dotted",
                   tint: live.rrRecent.isEmpty ? StrandPalette.textTertiary : StrandPalette.metricCyan),
-            .init(title: "Connection",
-                  value: activeConnection && live.encryptedBond ? "Encrypted" : activeConnection ? "Partial" : live.connected ? "Connected" : "Offline",
-                  detail: activeConnection && live.encryptedBond ? "Controls unlocked" : "Standard HR is not a full bond",
+            .init(title: String(localized: "Connection"),
+                  value: activeConnection && live.encryptedBond ? String(localized: "Encrypted") : activeConnection ? String(localized: "Partial") : live.connected ? String(localized: "Connected") : String(localized: "Offline"),
+                  detail: activeConnection && live.encryptedBond ? String(localized: "Controls unlocked") : String(localized: "Standard HR is not a full bond"),
                   icon: "lock.shield",
                   tint: connectionModeColor),
-            .init(title: "History sync",
-                  value: live.backfilling ? "\(live.syncChunksThisSession) chunks" : lastSyncLabel,
+            .init(title: String(localized: "History sync"),
+                  value: live.backfilling ? String(localized: "\(live.syncChunksThisSession) chunks") : lastSyncLabel,
                   detail: syncDetail,
                   icon: "clock.arrow.circlepath",
                   tint: live.backfilling ? StrandPalette.metricCyan : StrandPalette.textSecondary),
-            .init(title: "Battery",
-                  value: live.batteryPct.map { "\(Int($0))%" } ?? "Unknown",
-                  detail: live.charging == true ? "Charging" : "Last reported by strap",
+            .init(title: String(localized: "Battery"),
+                  value: live.batteryPct.map { "\(Int($0))%" } ?? String(localized: "Unknown"),
+                  detail: live.charging == true ? String(localized: "Charging") : String(localized: "Last reported by strap"),
                   icon: "battery.75percent",
                   tint: batteryTint),
             // Wear is only trustworthy on a live link: `worn` defaults true (LiveState) and is only
             // updated by WRIST_ON/OFF events, so while OFFLINE it would otherwise read a false-green
             // "On wrist". Gate the value AND tint on activeConnection (triage fix for PR#191).
-            .init(title: "Wear state",
-                  value: activeConnection ? (live.worn ? "On wrist" : "Off wrist") : "Unknown",
-                  detail: activeConnection ? (live.worn ? "Eligible for live physiology" : "Wear the strap for scoring") : "Connect to read wear state",
+            .init(title: String(localized: "Wear state"),
+                  value: activeConnection ? (live.worn ? String(localized: "On wrist") : String(localized: "Off wrist")) : String(localized: "Unknown"),
+                  detail: activeConnection ? (live.worn ? String(localized: "Eligible for live physiology") : String(localized: "Wear the strap for scoring")) : String(localized: "Connect to read wear state"),
                   icon: "sensor.tag.radiowaves.forward",
                   tint: !activeConnection ? StrandPalette.textTertiary : live.worn ? StrandPalette.accent : StrandPalette.statusWarning)
         ]
@@ -532,7 +532,7 @@ struct LiveView: View {
     }
 
     private var lastSyncLabel: String {
-        guard let ts = live.lastSyncedAt else { return "Never" }
+        guard let ts = live.lastSyncedAt else { return String(localized: "Never") }
         let date = Date(timeIntervalSince1970: ts)
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
@@ -541,8 +541,8 @@ struct LiveView: View {
 
     private var syncDetail: String {
         if let err = live.lastSyncError { return err }
-        if live.backfilling { return "\(live.decodedChunksThisSession) decoded, \(live.consoleChunksThisSession) console" }
-        return live.lastSyncedAt == nil ? "No completed offload yet" : "Last offload completed"
+        if live.backfilling { return String(localized: "\(live.decodedChunksThisSession) decoded, \(live.consoleChunksThisSession) console") }
+        return live.lastSyncedAt == nil ? String(localized: "No completed offload yet") : String(localized: "Last offload completed")
     }
 
     // MARK: - Session console (record / inspect the current stream)
@@ -595,7 +595,7 @@ struct LiveView: View {
                 showStartSport = true
             }
             .disabled(!activeConnection)
-            .help("Track a workout manually — records heart rate and effort until you end it.")
+            .help("Track a workout manually. Records heart rate and effort until you end it.")
 
             NoopButton("Refresh", systemImage: "arrow.clockwise", kind: .secondary) {
                 model.getBattery()
@@ -611,7 +611,7 @@ struct LiveView: View {
             .disabled(!activeConnection)
             .help(activeConnection
                   ? "Take a 60-second seated HRV reading from the live R-R stream."
-                  : "Connect your strap first — the reading needs the live R-R stream.")
+                  : "Connect your strap first. The reading needs the live R-R stream.")
         }
     }
 
@@ -632,9 +632,9 @@ struct LiveView: View {
                 HStack(spacing: NoopMetrics.gap) {
                     workoutStat("HR", model.bpm.map { "\($0)" } ?? "—",
                                 tint: model.bpm == nil ? StrandPalette.textPrimary : StrandPalette.metricRose)
-                    workoutStat("Avg", w.avgHr > 0 ? "\(w.avgHr)" : "—")
-                    workoutStat("Peak", w.peakHr > 0 ? "\(w.peakHr)" : "—")
-                    workoutStat("Effort", UnitFormatter.effortDisplay(w.liveStrain, scale: effortScale),
+                    workoutStat(String(localized: "Avg"), w.avgHr > 0 ? "\(w.avgHr)" : "—")
+                    workoutStat(String(localized: "Peak"), w.peakHr > 0 ? "\(w.peakHr)" : "—")
+                    workoutStat(String(localized: "Effort"), UnitFormatter.effortDisplay(w.liveStrain, scale: effortScale),
                                 tint: StrandPalette.strainColor(w.liveStrain))
                 }
                 HStack(spacing: NoopMetrics.rowSpacing) {
@@ -664,8 +664,8 @@ struct LiveView: View {
 
     private func workoutSavedRow(_ row: WorkoutRow) -> some View {
         let mins = Int((row.durationS ?? 0) / 60)
-        let parts = ["\(mins) min", row.avgHr.map { "\($0) avg bpm" },
-                     row.strain.map { "effort \(UnitFormatter.effortDisplay($0, scale: effortScale))" }].compactMap { $0 }
+        let parts = [String(localized: "\(mins) min"), row.avgHr.map { String(localized: "\($0) avg bpm") },
+                     row.strain.map { String(localized: "effort \(UnitFormatter.effortDisplay($0, scale: effortScale))") }].compactMap { $0 }
         return HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(StrandPalette.accent)
             Text("Workout saved · \(parts.joined(separator: " · "))")
@@ -686,7 +686,7 @@ struct LiveView: View {
                 .foregroundStyle(StrandPalette.statusWarning)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Can't connect — your strap's pairing was reset")
+                Text("Can't connect: your strap's pairing was reset")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
                 Text(guide)
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
@@ -708,7 +708,7 @@ struct LiveView: View {
                 .foregroundStyle(StrandPalette.statusWarning)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Live HR works — free the strap to unlock buzz, alarms & sync")
+                Text("Live HR works. Free the strap to unlock buzz, alarms & sync")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textPrimary)
                 Text(hint)
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textSecondary)
@@ -878,8 +878,8 @@ struct LiveView: View {
     /// it's the live link ("Connected to …") or just the band Scan would target ("… is your active band").
     private var manageDevicesDetail: String {
         activeConnection
-            ? "Connected to \(activeDeviceName). Pair or switch bands in Devices."
-            : "\(activeDeviceName) is your active band. Pair or switch bands in Devices."
+            ? String(localized: "Connected to \(activeDeviceName). Pair or switch bands in Devices.")
+            : String(localized: "\(activeDeviceName) is your active band. Pair or switch bands in Devices.")
     }
 
     // MARK: - Controls

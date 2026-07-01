@@ -44,7 +44,7 @@ struct LabBookView: View {
     var body: some View {
         ScreenScaffold(
             title: "Lab Book",
-            subtitle: "Your bloods, BP and body numbers — kept private, on \(Platform.deviceNounPhrase).",
+            subtitle: "Your bloods, BP and body numbers. Kept private, on \(Platform.deviceNounPhrase).",
             onRefresh: { await load() },
             // PERF: the column ends in one `categorySection` per marker category (bloods / BP / body / …),
             // each carrying its own sparkline-bearing cards. The LazyVStack path builds the off-screen
@@ -109,9 +109,9 @@ struct LabBookView: View {
                             .foregroundStyle(StrandPalette.textTertiary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("What Lab Book is — and isn't")
+                    .accessibilityLabel("What Lab Book is (and isn't)")
                 }
-                Text("It's a notebook, not a lab. NOOP lines up the numbers you enter — it doesn't test, read, or judge them. Not medical advice.")
+                Text("It's a notebook, not a lab. NOOP lines up the numbers you enter. It doesn't test, read, or judge them. Not medical advice.")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
@@ -125,11 +125,15 @@ struct LabBookView: View {
         }
     }
 
+    /// Whole-phrase variants per count so translators see complete phrases (never stitched plurals).
     private var countLine: String {
         let keys = Set(markers.map(\.markerKey)).count
-        let markerWord = keys == 1 ? "marker" : "markers"
-        let readingWord = markers.count == 1 ? "reading" : "readings"
-        return "\(keys) \(markerWord) tracked · \(markers.count) \(readingWord)"
+        switch (keys == 1, markers.count == 1) {
+        case (true, true):   return String(localized: "1 marker tracked · 1 reading")
+        case (true, false):  return String(localized: "1 marker tracked · \(markers.count) readings")
+        case (false, true):  return String(localized: "\(keys) markers tracked · 1 reading")
+        case (false, false): return String(localized: "\(keys) markers tracked · \(markers.count) readings")
+        }
     }
 
     // MARK: - Import entry (reuses the Data Sources import-card idiom)
@@ -152,7 +156,7 @@ struct LabBookView: View {
                     Spacer(minLength: 8)
                     StatePill("Coming soon", tone: .neutral, showsDot: false)
                 }
-                Text("A bulk markers CSV import (date, marker, value, unit) lands with the file importers in Data Sources — same as nutrition and lifting. For now, add readings one at a time above. Everything you import stays on \(Platform.deviceNounPhrase).")
+                Text("A bulk markers CSV import (date, marker, value, unit) lands with the file importers in Data Sources, same as nutrition and lifting. For now, add readings one at a time above. Everything you import stays on \(Platform.deviceNounPhrase).")
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -256,7 +260,7 @@ struct LabBookView: View {
 
     private var disclaimerNote: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Lab Book is a private notebook, not a medical service. NOOP stores and lines up the numbers you enter — it doesn't test, read, diagnose, or advise. Your records never leave \(Platform.deviceNounPhrase); there's no account or cloud, so it isn't \"HIPAA-covered.\" Always rely on your doctor or pharmacist to interpret results.")
+            Text("Lab Book is a private notebook, not a medical service. NOOP stores and lines up the numbers you enter. It doesn't test, read, diagnose, or advise. Your records never leave \(Platform.deviceNounPhrase); there's no account or cloud, so it isn't \"HIPAA-covered.\" Always rely on your doctor or pharmacist to interpret results.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -292,8 +296,8 @@ struct LabBookView: View {
     }
 
     private func lastTakenCaption(_ row: LabMarkerRow?) -> String {
-        guard let row else { return "no readings yet" }
-        return "last taken \(LabBookFormat.day(row.takenAt))"
+        guard let row else { return String(localized: "no readings yet") }
+        return String(localized: "last taken \(LabBookFormat.day(row.takenAt))")
     }
 
     private var detailBinding: Binding<MarkerKeyID?> {
@@ -342,12 +346,12 @@ extension LabMarkerCategory {
     /// Human label for the Lab Book grouping header. Organisational only — never a clinical panel name.
     var displayName: String {
         switch self {
-        case .bloodPanel:      return "Blood panel"
-        case .bloodPressure:   return "Blood pressure"
-        case .bodyMeasurement: return "Body"
-        case .imaging:         return "Imaging"
-        case .appointmentNote: return "Notes"
-        case .other:           return "Custom"
+        case .bloodPanel:      return String(localized: "Blood panel")
+        case .bloodPressure:   return String(localized: "Blood pressure")
+        case .bodyMeasurement: return String(localized: "Body")
+        case .imaging:         return String(localized: "Imaging")
+        case .appointmentNote: return String(localized: "Notes")
+        case .other:           return String(localized: "Custom")
         }
     }
 }
@@ -410,7 +414,9 @@ private struct MarkerDetailView: View {
 
     var body: some View {
         ScreenScaffold(title: LocalizedStringKey(displayName),
-                       subtitle: "\(readings.count) reading\(readings.count == 1 ? "" : "s") · your own entries",
+                       // Whole-phrase variants per count (never a stitched plural).
+                       subtitle: readings.count == 1 ? "1 reading · your own entries"
+                                                     : "\(readings.count) readings · your own entries",
                        // PERF: chart + full-history column (a trend Sparkline, the compare card, then a
                        // row-per-reading history list). The LazyVStack path builds the off-screen history
                        // rows on demand — byte-identical layout — so a marker with many readings doesn't
@@ -468,22 +474,25 @@ private struct MarkerDetailView: View {
     }
 
     /// "Your last 3 LDL readings: 3.4 → 3.1 → 2.9 mmol/L, trending down." — descriptive only.
+    /// Whole-phrase variants per direction so translators never see a stitched trend fragment.
     private var trendSentence: String {
         let nums = numericReadings
         guard let last = nums.last?.value else {
-            return readings.last?.valueText.map { "Latest entry: \($0)." } ?? "No numeric readings yet."
+            return readings.last?.valueText.map { String(localized: "Latest entry: \($0).") } ?? String(localized: "No numeric readings yet.")
         }
         guard nums.count >= 2 else {
-            return "One reading so far: \(LabBookFormat.value(last, key: markerKey)) \(unit). Log a few more to see a trend."
+            return String(localized: "One reading so far: \(LabBookFormat.value(last, key: markerKey)) \(unit). Log a few more to see a trend.")
         }
         let shown = nums.suffix(3).compactMap { $0.value }
         let arrowed = shown.map { LabBookFormat.value($0, key: markerKey) }.joined(separator: " → ")
         let first = shown.first ?? last
-        let direction: String
-        if last > first { direction = "trending up" }
-        else if last < first { direction = "trending down" }
-        else { direction = "holding steady" }
-        return "Your last \(shown.count) readings: \(arrowed) \(unit), \(direction)."
+        if last > first {
+            return String(localized: "Your last \(shown.count) readings: \(arrowed) \(unit), trending up.")
+        }
+        if last < first {
+            return String(localized: "Your last \(shown.count) readings: \(arrowed) \(unit), trending down.")
+        }
+        return String(localized: "Your last \(shown.count) readings: \(arrowed) \(unit), holding steady.")
     }
 
     private var latestReferenceText: String? {
@@ -561,9 +570,12 @@ private struct MarkerDetailView: View {
             Text("Lining them up…").font(StrandFont.subhead).foregroundStyle(StrandPalette.textTertiary)
         } else if n < LabBookSignals.floor {
             // Below the floor: show the points exist, withhold the conclusion sentence.
+            // Whole-phrase variants per count (never a stitched plural).
             Text(n == 0
-                 ? "No overlap yet between this marker and \(signal?.title.lowercased() ?? "that signal"). Log a few more readings (and keep wearing your strap)."
-                 : "\(n) reading\(n == 1 ? "" : "s") line up so far — not enough to read a trend yet (NOOP waits for \(LabBookSignals.floor)).")
+                 ? "No overlap yet between this marker and \(signal?.title.lowercased() ?? String(localized: "that signal")). Log a few more readings (and keep wearing your strap)."
+                 : (n == 1
+                    ? "1 reading lines up so far, not enough to read a trend yet (NOOP waits for \(LabBookSignals.floor))."
+                    : "\(n) readings line up so far, not enough to read a trend yet (NOOP waits for \(LabBookSignals.floor))."))
                 .font(StrandFont.subhead)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -599,7 +611,7 @@ private struct MarkerDetailView: View {
                 .foregroundStyle(StrandPalette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             // The mandatory clause for markers (spec §"On-device algorithm").
-            Text("\(n) readings used · \(LabBookSignals.strengthWord(c.r)) \(LabBookSignals.directionWord(c.r)) association. This is your own data sitting side by side — it's not a medical finding, and it shows association, not cause.")
+            Text("\(n) readings used · \(LabBookSignals.strengthWord(c.r)) \(LabBookSignals.directionWord(c.r)) association. This is your own data sitting side by side. It's not a medical finding, and it shows association, not cause.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -689,9 +701,9 @@ enum LabWindow: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .week:      return "7d"
-        case .fortnight: return "14d"
-        case .month:     return "30d"
+        case .week:      return String(localized: "7d")
+        case .fortnight: return String(localized: "14d")
+        case .month:     return String(localized: "30d")
         }
     }
     var days: Int {
@@ -703,9 +715,9 @@ enum LabWindow: String, CaseIterable, Identifiable {
     }
     var phrase: String {
         switch self {
-        case .week:      return "7 days"
-        case .fortnight: return "14 days"
-        case .month:     return "30 days"
+        case .week:      return String(localized: "7 days")
+        case .fortnight: return String(localized: "14 days")
+        case .month:     return String(localized: "30 days")
         }
     }
 }
@@ -744,26 +756,28 @@ enum LabBookSignals {
 
     static func strengthWord(_ r: Double) -> String {
         switch abs(r) {
-        case ..<0.1:  return "negligible"
-        case ..<0.3:  return "weak"
-        case ..<0.5:  return "moderate"
-        case ..<0.7:  return "strong"
-        default:      return "very strong"
+        case ..<0.1:  return String(localized: "negligible")
+        case ..<0.3:  return String(localized: "weak")
+        case ..<0.5:  return String(localized: "moderate")
+        case ..<0.7:  return String(localized: "strong")
+        default:      return String(localized: "very strong")
         }
     }
 
     static func directionWord(_ r: Double) -> String {
         if abs(r) < 0.1 { return "" }
-        return r >= 0 ? "positive" : "negative"
+        return r >= 0 ? String(localized: "positive") : String(localized: "negative")
     }
 
     /// "When LDL is higher, HRV tends to be lower." — descriptive, no causal language.
+    /// Whole-phrase variants per direction so translators never see a stitched verb fragment.
     static func insightSentence(markerName: String, signalName: String, r: Double) -> String {
         guard abs(r) >= 0.3 else {
-            return "Over your readings, \(markerName) and \(signalName.lowercased()) move largely independently — no clear relationship."
+            return String(localized: "Over your readings, \(markerName) and \(signalName.lowercased()) move largely independently. No clear relationship.")
         }
-        let verb = r < 0 ? "tends to be lower" : "tends to be higher"
-        return "When \(markerName) is higher, \(signalName.lowercased()) \(verb)."
+        return r < 0
+            ? String(localized: "When \(markerName) is higher, \(signalName.lowercased()) tends to be lower.")
+            : String(localized: "When \(markerName) is higher, \(signalName.lowercased()) tends to be higher.")
     }
 
     static func correlationColor(_ r: Double) -> Color {
@@ -780,11 +794,11 @@ private struct LabBookDisclaimerView: View {
     var body: some View {
         ScreenScaffold(title: "About Lab Book", subtitle: "A private notebook, not a medical service.") {
             VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-                bullet("NOOP stores and lines up the numbers you enter yourself. It does not test you, read your results, give medical advice, or diagnose anything.")
-                bullet("Anything you see here — including any side-by-side trend — is your own information shown back to you. It's an association, never a cause, and never a medical finding.")
-                bullet("NOOP never decides whether a value is \"normal,\" \"high,\" or \"low.\" Any reference range shown is exactly what you typed from your own report.")
-                bullet("Your records never leave \(Platform.deviceNounPhrase). There's no account, no cloud, no NOOP server. Because NOOP is an independent app you run yourself — not a healthcare provider — it isn't \"HIPAA-covered,\" and that protection doesn't apply here; the safety comes from the data being local-only and yours.")
-                bullet("Always rely on your doctor, pharmacist, or a qualified professional to interpret results and make decisions. If a number worries you, talk to them — not to an app.")
+                bullet(String(localized: "NOOP stores and lines up the numbers you enter yourself. It does not test you, read your results, give medical advice, or diagnose anything."))
+                bullet(String(localized: "Anything you see here (including any side-by-side trend) is your own information shown back to you. It's an association, never a cause, and never a medical finding."))
+                bullet(String(localized: "NOOP never decides whether a value is \"normal,\" \"high,\" or \"low.\" Any reference range shown is exactly what you typed from your own report."))
+                bullet(String(localized: "Your records never leave \(Platform.deviceNounPhrase). There's no account, no cloud, no NOOP server. Because NOOP is an independent app you run yourself (not a healthcare provider), it isn't \"HIPAA-covered,\" and that protection doesn't apply here; the safety comes from the data being local-only and yours."))
+                bullet(String(localized: "Always rely on your doctor, pharmacist, or a qualified professional to interpret results and make decisions. If a number worries you, talk to them, not to an app."))
                 Button("Got it") { dismiss() }
                     .buttonStyle(.noopPrimary)
                     .padding(.top, 4)

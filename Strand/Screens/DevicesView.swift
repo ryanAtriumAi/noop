@@ -102,7 +102,7 @@ private struct DevicesContent: View {
                 switchTarget = nil
             }
         } message: { device in
-            Text("Make \(device.displayName) your active strap? From now on it provides your live data. \(currentActiveName)'s history stays exactly as it is — only new days come from \(device.displayName).")
+            Text("Make \(device.displayName) your active strap? From now on it provides your live data. \(currentActiveName)'s history stays exactly as it is. Only new days come from \(device.displayName).")
         }
         // Rename
         .alert("Rename device",
@@ -193,7 +193,7 @@ private struct DevicesContent: View {
             Image(systemName: "info.circle")
                 .foregroundStyle(StrandPalette.textTertiary)
                 .accessibilityHidden(true)
-            Text("WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps are an early, in-development addition — they stream live heart rate and HRV, but not WHOOP's deeper sleep and recovery data.")
+            Text("WHOOP is NOOP's primary, fully-supported band. Other heart-rate straps are an early, in-development addition: they stream live heart rate and HRV, but not WHOOP's deeper sleep and recovery data.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -203,7 +203,7 @@ private struct DevicesContent: View {
     // MARK: Logic
 
     private var currentActiveName: String {
-        registry.devices.first(where: { $0.status == .active })?.displayName ?? "Your current strap"
+        registry.devices.first(where: { $0.status == .active })?.displayName ?? String(localized: "Your current strap")
     }
 
     /// Archive the device, then — if it was the active one and other non-archived devices remain —
@@ -405,9 +405,9 @@ private struct DeviceCard: View {
     }
 
     private var lastSeenLine: String {
-        if device.status == .archived { return "Removed · data kept" }
-        if isLiveConnected { return "Connected now" }
-        return "Last seen \(relativeAgo(TimeInterval(device.lastSeenAt)))"
+        if device.status == .archived { return String(localized: "Removed · data kept") }
+        if isLiveConnected { return String(localized: "Connected now") }
+        return String(localized: "Last seen \(relativeAgo(TimeInterval(device.lastSeenAt)))")
     }
 
     /// Honest paired-but-not-connected note for a locally-adopted Oura ring. Amber heads-up, no fabricated
@@ -462,18 +462,18 @@ struct DeviceCapabilityProfile {
         // Effort-scored only when the machine actually reports heart rate.
         if d.sourceKind == .ftms {
             return DeviceCapabilityProfile(
-                displayModel: "Gym equipment (FTMS)",
-                captures: "Speed · Cadence · Power · Distance · Energy · Heart rate (if the machine sends it)",
-                powers: "Records a live machine workout — Effort-scored from HR when the machine reports it",
-                footnote: "Live machine data over Bluetooth FTMS. No sleep, recovery, skin temp or SpO₂. Effort needs the machine's heart rate; without it the session logs the machine metrics only.")
+                displayModel: String(localized: "Gym equipment (FTMS)"),
+                captures: String(localized: "Speed · Cadence · Power · Distance · Energy · Heart rate (if the machine sends it)"),
+                powers: String(localized: "Records a live machine workout, Effort-scored from HR when the machine reports it"),
+                footnote: String(localized: "Live machine data over Bluetooth FTMS. No sleep, recovery, skin temp or SpO₂. Effort needs the machine's heart rate; without it the session logs the machine metrics only."))
         }
         // EXPERIMENTAL Huami device (Amazfit / Zepp / Mi Band): best-effort live HR only, honest about it.
         if d.sourceKind == .huami {
             return DeviceCapabilityProfile(
-                displayModel: "\(d.brand) (experimental)",
-                captures: "Heart rate (live, best-effort)",
-                powers: "Powers the live console + Effort — no Charge, Rest or Sleep",
-                footnote: "Experimental: live heart rate where the band exposes it. Some bands need a pairing we can't do yet — NOOP will say so honestly and never show a made-up number. No sleep, recovery, skin temp, SpO₂ or steps.")
+                displayModel: String(localized: "\(d.brand) (experimental)"),
+                captures: String(localized: "Heart rate (live, best-effort)"),
+                powers: String(localized: "Powers the live console + Effort. No Charge, Rest or Sleep"),
+                footnote: String(localized: "Experimental: live heart rate where the band exposes it. Some bands need a pairing we can't do yet. NOOP will say so honestly and never show a made-up number. No sleep, recovery, skin temp, SpO₂ or steps."))
         }
         // EXPERIMENTAL locally-adopted Oura ring (gen 3/4/5). The gen is carried on `model` ("Oura Ring
         // 3/4/5") and recovered with OuraRingGen.from(model:). NOOP reads the ring's OWN raw signals + open
@@ -486,16 +486,16 @@ struct DeviceCapabilityProfile {
             // gen3/4 are verified-shape; gen5 ("newer") carries the least-proven caveat.
             let newer = (gen == .gen5)
             let captures = newer
-                ? "Heart rate* · HRV* · Sleep* · Resting HR* · Skin temp* · Battery*"
-                : "Heart rate · HRV* · Sleep · Resting HR · Skin temp* · Battery"
+                ? String(localized: "Heart rate* · HRV* · Sleep* · Resting HR* · Skin temp* · Battery*")
+                : String(localized: "Heart rate · HRV* · Sleep · Resting HR · Skin temp* · Battery")
             let powers = newer
-                ? "Powers Effort now; Charge and Rest once enough nights and decode are confirmed"
-                : "Powers Charge, Effort, Rest and Sleep"
+                ? String(localized: "Powers Effort now; Charge and Rest once enough nights and decode are confirmed")
+                : String(localized: "Powers Charge, Effort, Rest and Sleep")
             return DeviceCapabilityProfile(
-                displayModel: "\(gen.displayName) (Beta)",
+                displayModel: String(localized: "\(gen.displayName) (Beta)"),
                 captures: captures,
                 powers: powers,
-                footnote: "Beta. * is an on-device estimate. Skin temp is a trend versus your own baseline, and HRV needs you to be still. No Oura Readiness or SpO₂ percentage comes off the ring (import an Oura file for those).")
+                footnote: String(localized: "Beta. * is an on-device estimate. Skin temp is a trend versus your own baseline, and HRV needs you to be still. No Oura Readiness or SpO₂ percentage comes off the ring (import an Oura file for those)."))
         }
         // Apple Watch (live HealthKit source). UNLIKE the WHOOP/strap branches, the watch's stored
         // capability `Set` is already the honest per-model trim (AppleWatchDevice only adds a metric
@@ -504,50 +504,50 @@ struct DeviceCapabilityProfile {
         // score (~a week of nights), so the footnote sets that expectation rather than over-promising.
         if d.sourceKind == .liveAppleWatch {
             let labels: [(Metric, String)] = [
-                (.hr, "Heart rate"), (.hrv, "HRV"), (.sleep, "Sleep"),
-                (.steps, "Steps"), (.spo2, "Blood oxygen"), (.skinTemp, "Wrist temp"),
+                (.hr, String(localized: "Heart rate")), (.hrv, "HRV"), (.sleep, String(localized: "Sleep")),
+                (.steps, String(localized: "Steps")), (.spo2, String(localized: "Blood oxygen")), (.skinTemp, String(localized: "Wrist temp")),
             ]
             let captures = labels.filter { d.capabilities.contains($0.0) }.map { $0.1 }.joined(separator: " · ")
             return DeviceCapabilityProfile(
                 displayModel: "Apple Watch",
-                captures: captures.isEmpty ? "Calibrating, no data yet" : captures,
-                powers: "Powers Rest, Effort, Fitness Age and steps, plus Charge once recovery calibrates",
-                footnote: "Computed live from your Apple Watch via Health. Recovery needs about a week of nights to calibrate, and every watch-derived score is labelled with its confidence. Only the metrics your watch actually records are listed above.")
+                captures: captures.isEmpty ? String(localized: "Calibrating, no data yet") : captures,
+                powers: String(localized: "Powers Rest, Effort, Fitness Age and steps, plus Charge once recovery calibrates"),
+                footnote: String(localized: "Computed live from your Apple Watch via Health. Recovery needs about a week of nights to calibrate, and every watch-derived score is labelled with its confidence. Only the metrics your watch actually records are listed above."))
         }
         // Generic heart-rate strap: live HR + R-R only; drives the live console + Effort, nothing nightly.
         // (Same WHOOP test as SourceCoordinator.isWhoop, inlined so this stays nonisolated.)
         let isWhoop = d.id == "my-whoop" || d.brand.caseInsensitiveCompare("WHOOP") == .orderedSame
         guard isWhoop else {
             return DeviceCapabilityProfile(
-                displayModel: "Heart-rate strap",
-                captures: "Heart rate · HRV (live)* · Strain",
-                powers: "Powers the live console + Effort — no Charge, Rest or Sleep",
-                footnote: "Live HR + R-R only · no sleep, recovery, skin temp, SpO₂, steps or battery (those are WHOOP-only).")
+                displayModel: String(localized: "Heart-rate strap"),
+                captures: String(localized: "Heart rate · HRV (live)* · Strain"),
+                powers: String(localized: "Powers the live console + Effort. No Charge, Rest or Sleep"),
+                footnote: String(localized: "Live HR + R-R only · no sleep, recovery, skin temp, SpO₂, steps or battery (those are WHOOP-only)."))
         }
-        let whoopPowers = "Powers Charge, Effort, Rest, Sleep + Health Monitor"
+        let whoopPowers = String(localized: "Powers Charge, Effort, Rest, Sleep + Health Monitor")
         let model = d.model.lowercased()
         // WHOOP 5.0 / MG — adds a (raw) step count the 4.0 can't read over BLE.
         if model.contains("5") || model.contains("mg") {
             return DeviceCapabilityProfile(
                 displayModel: "WHOOP 5.0 / MG",
-                captures: "Heart rate · HRV · Skin temp* · Resp rate* · Steps* · Sleep · Strain · Battery",
+                captures: String(localized: "Heart rate · HRV · Skin temp* · Resp rate* · Steps* · Sleep · Strain · Battery"),
                 powers: whoopPowers,
-                footnote: "* on-device estimate — skin temp is a nightly ±°C deviation, steps are a raw motion count (#78). No SpO₂ % off the strap; import a WHOOP CSV for a real %.")
+                footnote: String(localized: "* on-device estimate: skin temp is a nightly ±°C deviation, steps are a raw motion count (#78). No SpO₂ % off the strap; import a WHOOP CSV for a real %."))
         }
         // WHOOP 4.0 — NOOP's primary band; no steps over BLE.
         if model.contains("4") {
             return DeviceCapabilityProfile(
                 displayModel: "WHOOP 4.0",
-                captures: "Heart rate · HRV · Skin temp* · Resp rate* · Sleep · Strain · Battery",
+                captures: String(localized: "Heart rate · HRV · Skin temp* · Resp rate* · Sleep · Strain · Battery"),
                 powers: whoopPowers,
-                footnote: "* on-device estimate — skin temp is a nightly ±°C deviation (firmware-dependent); no steps over BLE on a 4.0. No SpO₂ % off the strap; import a WHOOP CSV for a real %.")
+                footnote: String(localized: "* on-device estimate: skin temp is a nightly ±°C deviation (firmware-dependent); no steps over BLE on a 4.0. No SpO₂ % off the strap; import a WHOOP CSV for a real %."))
         }
         // Legacy / unknown WHOOP (the seeded device, model just "WHOOP") — show only the common-to-all set.
         return DeviceCapabilityProfile(
             displayModel: "WHOOP",
-            captures: "Heart rate · HRV · Skin temp* · Resp rate* · Sleep · Strain · Battery",
+            captures: String(localized: "Heart rate · HRV · Skin temp* · Resp rate* · Sleep · Strain · Battery"),
             powers: whoopPowers,
-            footnote: "Exact model unknown — shows what every WHOOP can do. * on-device estimate · no SpO₂ % off the strap (import a WHOOP CSV for that).")
+            footnote: String(localized: "Exact model unknown. Shows what every WHOOP can do. * on-device estimate · no SpO₂ % off the strap (import a WHOOP CSV for that)."))
     }
 }
 
@@ -616,7 +616,7 @@ struct DeviceCardCatalog: View {
 
     var body: some View {
         ScreenScaffold(title: "Devices",
-                       subtitle: "What each band captures — and what NOOP uses it for.") {
+                       subtitle: "What each band captures (and what NOOP uses it for).") {
             VStack(spacing: NoopMetrics.gap) {
                 DeviceCard(device: Self.dev("whoop-4d", "WHOOP", "4.0", Self.whoopCaps),
                            isActive: true, isLiveConnected: true,

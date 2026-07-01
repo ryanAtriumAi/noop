@@ -23,7 +23,7 @@ struct IntelligenceView: View {
         // imported history, an eager VStack built every card up-front on the main thread and froze
         // the app when ALL was tapped (#345); LazyVStack only materialises what's on screen.
         ScreenScaffold(title: "Intelligence",
-                       subtitle: "NOOP scores your charge, effort and rest itself — on-device, no cloud.",
+                       subtitle: "NOOP scores your charge, effort and rest itself: on-device, no cloud.",
                        lazy: true) {
             if let f = forecast { forecastCard(f) }
             explainerCard
@@ -65,7 +65,8 @@ struct IntelligenceView: View {
                     Spacer()
                     SegmentedPillControl(IntelRange.allCases, selection: $range) { $0.label }
                 }
-                Text("\(filtered.count) \(filtered.count == 1 ? "day" : "days")")
+                // Whole-phrase variants per count so translators never see a stitched plural.
+                Text(filtered.count == 1 ? "1 day" : "\(filtered.count) days")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if filtered.isEmpty {
@@ -135,7 +136,7 @@ struct IntelligenceView: View {
     private func forecastCard(_ f: RecoveryForecast) -> some View {
         let frac = min(max(f.charge / 100.0, 0), 1)
         return VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Tomorrow's Charge", overline: "Evening forecast", trailing: "Estimate")
+            SectionHeader("Tomorrow's Charge", overline: "Evening forecast", trailing: String(localized: "Estimate"))
             NoopCard(padding: 20, tint: StrandPalette.chargeColor) {
                 VStack(spacing: 14) {
                     GlowRing(
@@ -161,7 +162,7 @@ struct IntelligenceView: View {
                             .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Estimate from today's effort, your typical sleep and your \(f.nights)-night recovery baseline — not a measurement. Your real Charge is scored from tomorrow's HRV when you wake.")
+                        Text("Estimate from today's effort, your typical sleep and your \(f.nights)-night recovery baseline, not a measurement. Your real Charge is scored from tomorrow's HRV when you wake.")
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -187,17 +188,17 @@ struct IntelligenceView: View {
                         .accessibilityHidden(true)
                     Text("How this works").font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
                 }
-                Text("Charge weighs your HRV against your personal baseline (~55%), resting heart rate (~20%), rest quality (~15%), respiration (~5%) and skin-temperature deviation (~5%). Effort is a 0–\(UnitFormatter.effortScaleMax(effortScale)) cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data — it works for any day NOOP collected raw streams.")
+                Text("Charge weighs your HRV against your personal baseline (~55%), resting heart rate (~20%), rest quality (~15%), respiration (~5%) and skin-temperature deviation (~5%). Effort is a 0–\(UnitFormatter.effortScaleMax(effortScale)) cardiovascular load from time in heart-rate zones. Rest is staged from movement and heart rate. Everything is computed here from the strap's raw data. It works for any day NOOP collected raw streams.")
                     .font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // The Charge model made concrete — the five weighted inputs, each its own metric accent.
                 VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
                     Text("Charge model").strandOverline()
-                    weightRow("Heart-rate variability", "~55%", fraction: 0.55, color: StrandPalette.metricPurple)
-                    weightRow("Resting heart rate", "~20%", fraction: 0.20, color: StrandPalette.metricRose)
-                    weightRow("Rest quality", "~15%", fraction: 0.15, color: StrandPalette.metricCyan)
-                    weightRow("Respiration", "~5%", fraction: 0.05, color: StrandPalette.accent)
-                    weightRow("Skin-temperature deviation", "~5%", fraction: 0.05, color: StrandPalette.metricAmber)
+                    weightRow(String(localized: "Heart-rate variability"), "~55%", fraction: 0.55, color: StrandPalette.metricPurple)
+                    weightRow(String(localized: "Resting heart rate"), "~20%", fraction: 0.20, color: StrandPalette.metricRose)
+                    weightRow(String(localized: "Rest quality"), "~15%", fraction: 0.15, color: StrandPalette.metricCyan)
+                    weightRow(String(localized: "Respiration"), "~5%", fraction: 0.05, color: StrandPalette.accent)
+                    weightRow(String(localized: "Skin-temperature deviation"), "~5%", fraction: 0.05, color: StrandPalette.metricAmber)
                     HStack {
                         Text("Effort").font(StrandFont.subhead).foregroundStyle(StrandPalette.textSecondary)
                         Spacer()
@@ -250,11 +251,11 @@ struct IntelligenceView: View {
                                 tint: d.source == .computed ? StrandPalette.chargeColor : StrandPalette.accent)
                 }
                 HStack(spacing: 0) {
-                    stat("Charge", d.recovery.map { "\(Int($0.rounded()))%" } ?? "—",
+                    stat(String(localized: "Charge"), d.recovery.map { "\(Int($0.rounded()))%" } ?? "—",
                          d.recovery.map { StrandPalette.recoveryColor($0) } ?? StrandPalette.textSecondary)
-                    stat("Effort", d.strain.map { UnitFormatter.effortDisplay($0, scale: effortScale) } ?? "—",
+                    stat(String(localized: "Effort"), d.strain.map { UnitFormatter.effortDisplay($0, scale: effortScale) } ?? "—",
                          d.strain.map { StrandPalette.strainColor($0) } ?? StrandPalette.textSecondary)
-                    stat("Rest", d.sleepMin.map { "\(Int($0 / 60))h \(Int($0.truncatingRemainder(dividingBy: 60)))m" } ?? "—", StrandPalette.restColor)
+                    stat(String(localized: "Rest"), d.sleepMin.map { "\(Int($0 / 60))h \(Int($0.truncatingRemainder(dividingBy: 60)))m" } ?? "—", StrandPalette.restColor)
                     stat("HRV", d.hrv.map { "\(Int($0.rounded()))" } ?? "—", StrandPalette.metricPurple)
                     stat("RHR", d.rhr.map { "\($0)" } ?? "—", StrandPalette.metricRose)
                 }
@@ -308,12 +309,12 @@ private enum IntelRange: Int, CaseIterable, Hashable {
 
     var label: String {
         switch self {
-        case .week: return "W"
-        case .month: return "M"
-        case .quarter: return "3M"
-        case .half: return "6M"
-        case .year: return "1Y"
-        case .all: return "ALL"
+        case .week: return String(localized: "W")
+        case .month: return String(localized: "M")
+        case .quarter: return String(localized: "3M")
+        case .half: return String(localized: "6M")
+        case .year: return String(localized: "1Y")
+        case .all: return String(localized: "ALL")
         }
     }
 }

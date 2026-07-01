@@ -35,12 +35,12 @@ enum CompareRange: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .week:    return "W"
-        case .month:   return "M"
-        case .quarter: return "3M"
-        case .half:    return "6M"
-        case .year:    return "1Y"
-        case .all:     return "ALL"
+        case .week:    return String(localized: "W")
+        case .month:   return String(localized: "M")
+        case .quarter: return String(localized: "3M")
+        case .half:    return String(localized: "6M")
+        case .year:    return String(localized: "1Y")
+        case .all:     return String(localized: "ALL")
         }
     }
 
@@ -59,12 +59,12 @@ enum CompareRange: String, CaseIterable, Identifiable {
     /// A human phrase for sentences ("over 1Y").
     var phrase: String {
         switch self {
-        case .week:    return "the last 7 days"
-        case .month:   return "30 days"
-        case .quarter: return "3 months"
-        case .half:    return "6 months"
-        case .year:    return "1 year"
-        case .all:     return "all history"
+        case .week:    return String(localized: "the last 7 days")
+        case .month:   return String(localized: "30 days")
+        case .quarter: return String(localized: "3 months")
+        case .half:    return String(localized: "6 months")
+        case .year:    return String(localized: "1 year")
+        case .all:     return String(localized: "all history")
         }
     }
 
@@ -244,19 +244,25 @@ struct CompareView: View {
     /// crosshair tooltip — driven by pointer hover on macOS, by tap/drag on iOS.
     private var inspectHint: String {
         #if os(iOS)
-        return "tap or drag for real values"
+        return String(localized: "tap or drag for real values")
         #else
-        return "hover for real values"
+        return String(localized: "hover for real values")
         #endif
     }
 
     /// "N readings · <range>" caption near the control, flagging any auto-widen.
+    /// Whole-phrase variants per count so translators see complete sentences.
     private var rangeCaption: String {
         let series = activeSeries
         let total = series.reduce(0) { $0 + $1.rows.count }
-        let unit = total == 1 ? "reading" : "readings"
-        let base = "\(total) \(unit) across \(series.count) · \(range.phrase)"
-        return anyWidened ? base + " · sparse widened" : base
+        if anyWidened {
+            return total == 1
+                ? String(localized: "1 reading across \(series.count) · \(range.phrase) · sparse widened")
+                : String(localized: "\(total) readings across \(series.count) · \(range.phrase) · sparse widened")
+        }
+        return total == 1
+            ? String(localized: "1 reading across \(series.count) · \(range.phrase)")
+            : String(localized: "\(total) readings across \(series.count) · \(range.phrase)")
     }
 
     // MARK: - Loading
@@ -388,9 +394,9 @@ struct CompareView: View {
             ChartCard(
                 title: "Normalized overlay",
                 subtitle: anyWidened
-                    ? "Min–max normalized · sparse series widened past \(range.phrase) · \(inspectHint)"
-                    : "Each line min–max normalized within \(range.phrase) · \(inspectHint)",
-                trailing: "\(nonEmpty.count) series",
+                    ? String(localized: "Min–max normalized · sparse series widened past \(range.phrase) · \(inspectHint)")
+                    : String(localized: "Each line min–max normalized within \(range.phrase) · \(inspectHint)"),
+                trailing: String(localized: "\(nonEmpty.count) series"),
                 // Anchor the overlay card to the brand-green chrome world; each line keeps its own
                 // categorical series colour so the lines stay distinguishable against the wash.
                 tint: StrandPalette.accent
@@ -494,7 +500,9 @@ struct CompareView: View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("How They Move Together",
                           overline: "Pearson r · \(range.phrase)",
-                          trailing: pairs.isEmpty ? nil : "\(pairs.count) pairs")
+                          trailing: pairs.isEmpty ? nil
+                                    : (pairs.count == 1 ? String(localized: "1 pair")
+                                                        : String(localized: "\(pairs.count) pairs")))
 
             if pairs.isEmpty {
                 NoopCard {
@@ -554,15 +562,16 @@ struct CompareView: View {
     /// "Weight ↔ Recovery: r = −0.34 (moderate negative) over 1Y" + a plain-English
     /// conclusion when |r| is notable.
     private func insightSentence(_ p: PairResult) -> String {
-        let head = "\(p.a.metric.title) ↔ \(p.b.metric.title): r = \(signedR(p.r)) (\(strengthWord(p.r)) \(directionWord(p.r))) over \(p.n) shared days."
+        let head = String(localized: "\(p.a.metric.title) ↔ \(p.b.metric.title): r = \(signedR(p.r)) (\(strengthWord(p.r)) \(directionWord(p.r))) over \(p.n) shared days.")
         guard abs(p.r) >= 0.3 else {
-            return head + " No clear relationship — they move largely independently."
+            return String(localized: "\(head) No clear relationship. They move largely independently.")
         }
-        let lower = p.r < 0
         let aT = p.a.metric.title.lowercased()
         let bT = p.b.metric.title.lowercased()
-        let verb = lower ? "tends to fall" : "tends to rise"
-        return head + " When \(aT) rises, \(bT) \(verb) — a \(strengthWord(p.r)) \(directionWord(p.r)) link."
+        // Whole-phrase variants per direction so translators never see a stitched verb fragment.
+        return p.r < 0
+            ? String(localized: "\(head) When \(aT) rises, \(bT) tends to fall, a \(strengthWord(p.r)) \(directionWord(p.r)) link.")
+            : String(localized: "\(head) When \(aT) rises, \(bT) tends to rise, a \(strengthWord(p.r)) \(directionWord(p.r)) link.")
     }
 
     private func signedR(_ r: Double) -> String {
@@ -571,17 +580,17 @@ struct CompareView: View {
 
     private func strengthWord(_ r: Double) -> String {
         switch abs(r) {
-        case ..<0.1:  return "negligible"
-        case ..<0.3:  return "weak"
-        case ..<0.5:  return "moderate"
-        case ..<0.7:  return "strong"
-        default:      return "very strong"
+        case ..<0.1:  return String(localized: "negligible")
+        case ..<0.3:  return String(localized: "weak")
+        case ..<0.5:  return String(localized: "moderate")
+        case ..<0.7:  return String(localized: "strong")
+        default:      return String(localized: "very strong")
         }
     }
 
     private func directionWord(_ r: Double) -> String {
         if abs(r) < 0.1 { return "" }
-        return r >= 0 ? "positive" : "negative"
+        return r >= 0 ? String(localized: "positive") : String(localized: "negative")
     }
 
     private func correlationColor(_ r: Double) -> Color {

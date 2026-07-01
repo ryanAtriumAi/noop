@@ -137,7 +137,7 @@ private struct SyncStatusSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Sync", overline: "Strap history",
-                          trailing: live.connected ? (live.bonded ? "Connected" : "Pairing…") : "Offline")
+                          trailing: live.connected ? (live.bonded ? String(localized: "Connected") : String(localized: "Pairing…")) : String(localized: "Offline"))
 
             NoopCard(tint: StrandPalette.chargeColor) {
                 VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
@@ -191,15 +191,15 @@ private struct SyncStatusSection: View {
 
     private var helperText: String {
         if live.backfilling {
-            return "Pulling your strap's stored history. This drains oldest-first; a deep backlog now continues automatically across passes instead of waiting between syncs."
+            return String(localized: "Pulling your strap's stored history. This drains oldest-first; a deep backlog now continues automatically across passes instead of waiting between syncs.")
         }
         if !live.connected {
-            return "Connect your strap to sync its stored history. Until then, only imported data shows here."
+            return String(localized: "Connect your strap to sync its stored history. Until then, only imported data shows here.")
         }
         if !live.bonded {
-            return "Finishing the pairing handshake — Sync now becomes available once the strap is paired."
+            return String(localized: "Finishing the pairing handshake. Sync now becomes available once the strap is paired.")
         }
-        return "Syncs your strap's stored history right away, instead of waiting for the next automatic sync."
+        return String(localized: "Syncs your strap's stored history right away, instead of waiting for the next automatic sync.")
     }
 }
 
@@ -284,14 +284,14 @@ private struct HeartRateSection: View {
         let series = hrSeries(displayHR)
 
         return VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Heart Rate", overline: "Live", trailing: hrIsDerived ? "from R-R" : nil)
+            SectionHeader("Heart Rate", overline: "Live", trailing: hrIsDerived ? String(localized: "from R-R") : nil)
 
             // The live HR hero is a flat WHOOP card tinted rose — heart-rate's metric accent.
             // No scenic starfield / bloom: fill contrast carries the edge (Apple-flat).
             ChartCard(
                 title: "Heart Rate",
-                subtitle: hrIsDerived ? "Estimated from R-R interval"
-                    : (hasLiveHR ? "Streaming live" : "Awaiting strap"),
+                subtitle: hrIsDerived ? String(localized: "Estimated from R-R interval")
+                    : (hasLiveHR ? String(localized: "Streaming live") : String(localized: "Awaiting strap")),
                 trailing: hasLiveHR ? "\(displayHR!) bpm" : "—",
                 tint: StrandPalette.metricRose
             ) {
@@ -302,7 +302,7 @@ private struct HeartRateSection: View {
                     ("Zone", hasLiveHR ? "Z\(zone)" : "—"),
                     ("% Max", hasLiveHR ? "\(Int((fraction * 100).rounded()))%" : "—"),
                     ("Max HR", "\(profile.hrMax)"),
-                    ("State", hasLiveHR ? "STREAMING" : "IDLE"),
+                    ("State", hasLiveHR ? String(localized: "STREAMING") : String(localized: "IDLE")),
                 ])
             }
         }
@@ -359,8 +359,8 @@ private struct HeartRateSection: View {
     }
 
     private func zoneLabel(hasLiveHR: Bool, zone: Int, fraction: Double) -> String {
-        guard hasLiveHR else { return "Idle" }
-        return "Zone \(zone) · \(Int((fraction * 100).rounded()))%"
+        guard hasLiveHR else { return String(localized: "Idle") }
+        return String(localized: "Zone \(zone) · \(Int((fraction * 100).rounded()))%")
     }
 }
 
@@ -482,7 +482,7 @@ private struct RecoveryContributorsSection: View {
                 if ready {
                     ScoreStatePill(.solid)
                 } else {
-                    ScoreStatePill(.calibrating, text: "Calibrating — \(priorCount) of \(Baselines.minNightsSeed)")
+                    ScoreStatePill(.calibrating, text: "Calibrating (\(priorCount) of \(Baselines.minNightsSeed))")
                 }
             }
             NoopCard(tint: StrandPalette.chargeColor) {
@@ -495,7 +495,7 @@ private struct RecoveryContributorsSection: View {
                     }
                 }
             }
-            Text("Baselines are learned on-device over your first 14 days — until then, typical ranges apply.")
+            Text("Baselines are learned on-device over your first 14 days. Until then, typical ranges apply.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -566,10 +566,10 @@ private struct RecoveryContributorsSection: View {
     private func word(_ strength: Double?) -> String {
         guard let s = strength else { return "—" }
         switch s {
-        case ..<40:  return "Low"
-        case ..<60:  return "Fair"
-        case ..<78:  return "Good"
-        default:     return "Strong"
+        case ..<40:  return String(localized: "Low")
+        case ..<60:  return String(localized: "Fair")
+        case ..<78:  return String(localized: "Good")
+        default:     return String(localized: "Strong")
         }
     }
 
@@ -674,7 +674,7 @@ private struct FitnessAgeSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Fitness Age", overline: "Weekly",
-                          trailing: fitnessAge != nil ? "vs age \(profile.age)" : nil)
+                          trailing: fitnessAge != nil ? String(localized: "vs age \(profile.age)") : nil)
             content
         }
         .sheet(item: $fitnessSheet) { which in
@@ -708,11 +708,23 @@ private struct FitnessAgeSection: View {
                 readiness: readiness,
                 lead: readiness.canCompute
                     ? "A few more days and we can show your Fitness Age."
-                    : "A few more days of wear — plus the basics below — and we can show your Fitness Age.",
+                    : "A few more days of wear, plus the basics below, and we can show your Fitness Age.",
                 onFix: { fitnessSheet = .settings })
         } else {
             // Brief read of the weekly value; honest placeholder rather than an empty gap.
             ComingSoon(what: "Reading your Fitness Age…", symbol: "figure.run")
+        }
+    }
+
+    /// The younger/older-than-your-age subtitle as whole-phrase variants per count and direction, so
+    /// translators see complete sentences (never a stitched plural or direction fragment).
+    private func ageDeltaLine(years: Int, younger: Bool) -> String {
+        if years == 0 { return String(localized: "About the same as your age") }
+        switch (younger, years == 1) {
+        case (true, true):   return String(localized: "1 year younger than your age")
+        case (true, false):  return String(localized: "\(years) years younger than your age")
+        case (false, true):  return String(localized: "1 year older than your age")
+        case (false, false): return String(localized: "\(years) years older than your age")
         }
     }
 
@@ -736,9 +748,7 @@ private struct FitnessAgeSection: View {
                                     font: StrandFont.display(64),
                                     color: StrandPalette.textPrimary)
                             .tracking(StrandFont.displayTracking(64))
-                        Text(years == 0
-                             ? "About the same as your age"
-                             : "\(years) year\(years == 1 ? "" : "s") \(younger ? "younger" : "older") than your age")
+                        Text(ageDeltaLine(years: years, younger: younger))
                             .font(StrandFont.subhead)
                             .foregroundStyle(younger ? StrandPalette.statusPositive : StrandPalette.statusWarning)
                     }
@@ -763,7 +773,7 @@ private struct FitnessAgeSection: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Fitness Age \(shown), \(years) year\(years == 1 ? "" : "s") \(younger ? "younger" : "older") than your age. Tap to see the trend.")
+            .accessibilityLabel("Fitness Age \(shown), \(ageDeltaLine(years: years, younger: younger)). Tap to see the trend.")
 
             Text("± \(Int(FitnessAgeEngine.displayBandYears)) yr · a fitness comparison, not a biological age")
                 .font(StrandFont.footnote)
@@ -791,7 +801,10 @@ private struct FitnessAgeSection: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("How accurate is this? \(showReadiness ? "Hide" : "Show") the data behind your Fitness Age")
+            // Whole-string key per variant (never a stitched Hide/Show fragment).
+            .accessibilityLabel(showReadiness
+                ? "How accurate is this? Hide the data behind your Fitness Age"
+                : "How accurate is this? Show the data behind your Fitness Age")
         }
         .padding(NoopMetrics.space5)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -845,7 +858,7 @@ private struct ReadinessChecklistCard: View {
                 }
                 group(title: "Drives your Fitness Age", items: drivesAge)
                 group(title: "Unlocks your VO₂max", items: unlocksVO2)
-                Text("Built from published methods (Nes/HUNT) on \(Platform.deviceNounPhrase). It's a fitness comparison against an average peer your age — not a biological or medical age.")
+                Text("Built from published methods (Nes/HUNT) on \(Platform.deviceNounPhrase). It's a fitness comparison against an average peer your age, not a biological or medical age.")
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -857,7 +870,7 @@ private struct ReadinessChecklistCard: View {
     @ViewBuilder private var confidencePill: some View {
         switch readiness.confidence {
         case .ready:    ScoreStatePill(.solid, text: "Ready")
-        case .estimate: ScoreStatePill(.building, text: "Estimate — partial data")
+        case .estimate: ScoreStatePill(.building, text: "Estimate (partial data)")
         case .notReady: ScoreStatePill(.calibrating, text: "Not enough data yet")
         }
     }
@@ -933,9 +946,9 @@ private struct ReadinessChecklistCard: View {
     }
     private func statusWord(_ s: FitnessReadinessStatus) -> String {
         switch s {
-        case .satisfied: return "ready"
-        case .partial:   return "partial"
-        case .missing:   return "missing"
+        case .satisfied: return String(localized: "ready")
+        case .partial:   return String(localized: "partial")
+        case .missing:   return String(localized: "missing")
         }
     }
 }
@@ -978,7 +991,7 @@ private struct VitalitySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Vitality", overline: "Weekly",
-                          trailing: bodyAge != nil ? "Body Age \(Int((bodyAge ?? 0).rounded()))" : nil)
+                          trailing: bodyAge != nil ? String(localized: "Body Age \(Int((bodyAge ?? 0).rounded()))") : nil)
             if let v = vitality, let ba = bodyAge {
                 hero(vitality: v, bodyAge: ba)
             } else if loaded {
@@ -1016,8 +1029,7 @@ private struct VitalitySection: View {
                                 format: { "\(Int($0.rounded()))" },
                                 font: StrandFont.number(34),
                                 color: StrandPalette.textPrimary)
-                    Text(yrs == 0 ? "about your age"
-                         : "\(yrs) yr\(yrs == 1 ? "" : "s") \(younger ? "younger" : "older")")
+                    Text(bodyAgeDeltaLine(yrs: yrs, younger: younger))
                         .font(StrandFont.footnote)
                         .foregroundStyle(younger ? StrandPalette.statusPositive : StrandPalette.statusWarning)
                 }
@@ -1033,7 +1045,7 @@ private struct VitalitySection: View {
                         .font(StrandFont.footnote).foregroundStyle(StrandPalette.statusWarning)
                 }
             }
-            Text("A wellness estimate from your habits — not a clinical biological age.")
+            Text("A wellness estimate from your habits, not a clinical biological age.")
                 .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
         }
         .padding(NoopMetrics.space5)
@@ -1044,6 +1056,18 @@ private struct VitalitySection: View {
             FrostedCardSurface(tint: StrandPalette.chargeColor, cornerRadius: NoopMetrics.cardRadius)
         }
         .clipShape(RoundedRectangle(cornerRadius: NoopMetrics.cardRadius, style: .continuous))
+    }
+
+    /// The Body Age delta as whole-phrase variants per count and direction, so translators see
+    /// complete phrases (never a stitched plural or direction fragment).
+    private func bodyAgeDeltaLine(yrs: Int, younger: Bool) -> String {
+        if yrs == 0 { return String(localized: "about your age") }
+        switch (younger, yrs == 1) {
+        case (true, true):   return String(localized: "1 yr younger")
+        case (true, false):  return String(localized: "\(yrs) yrs younger")
+        case (false, true):  return String(localized: "1 yr older")
+        case (false, false): return String(localized: "\(yrs) yrs older")
+        }
     }
 
     private func load() async {
@@ -1098,7 +1122,7 @@ private struct VitalsSection: View {
                     .staggeredAppear(index: idx)
                 }
             }
-            Text("Once NOOP has 14 nights of history, in-range compares each vital to your own baseline (approximate — not medical advice); until then, typical adult ranges apply.")
+            Text("Once NOOP has 14 nights of history, in-range compares each vital to your own baseline (approximate, not medical advice); until then, typical adult ranges apply.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1185,11 +1209,11 @@ private struct HealthHubLinksSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Records & sources", overline: "On \(Platform.deviceNounPhrase)")
-            linkRow(title: "Lab Book",
-                    subtitle: "Keep your bloods, BP and body numbers — private, on \(Platform.deviceNounPhrase).",
+            linkRow(title: String(localized: "Lab Book"),
+                    subtitle: String(localized: "Keep your bloods, BP and body numbers private, on \(Platform.deviceNounPhrase)."),
                     symbol: "books.vertical.fill", tint: StrandPalette.metricCyan) { router.openLabBook() }
-            linkRow(title: "Your Data, Fused",
-                    subtitle: "The best-sourced number per metric across every band you use.",
+            linkRow(title: String(localized: "Your Data, Fused"),
+                    subtitle: String(localized: "The best-sourced number per metric across every band you use."),
                     symbol: "square.stack.3d.up.fill", tint: StrandPalette.accent) { router.openFusedRecord() }
         }
     }

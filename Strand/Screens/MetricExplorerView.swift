@@ -113,14 +113,14 @@ enum ExploreRange: Int, CaseIterable, Identifiable, Hashable {
     var id: Int { rawValue }
     var label: String {
         switch self {
-        case .week: return "W"; case .month: return "M"; case .quarter: return "3M"
-        case .half: return "6M"; case .year: return "1Y"; case .all: return "ALL"
+        case .week: return String(localized: "W"); case .month: return String(localized: "M"); case .quarter: return String(localized: "3M")
+        case .half: return String(localized: "6M"); case .year: return String(localized: "1Y"); case .all: return String(localized: "ALL")
         }
     }
     var name: String {
         switch self {
-        case .week: return "week"; case .month: return "month"; case .quarter: return "quarter"
-        case .half: return "6 months"; case .year: return "year"; case .all: return "all time"
+        case .week: return String(localized: "week"); case .month: return String(localized: "month"); case .quarter: return String(localized: "quarter")
+        case .half: return String(localized: "6 months"); case .year: return String(localized: "year"); case .all: return String(localized: "all time")
         }
     }
     /// Trailing days the window spans (nil = everything).
@@ -363,7 +363,10 @@ private struct MetricRow: View {
         .padding(.vertical, 11)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(metric.title), \(unitLabel.isEmpty ? metric.category : unitLabel)\(isEmpty ? ", no data" : "")")
+        // Whole-string key per variant (never a concatenated localized tail on an a11y label).
+        .accessibilityLabel(isEmpty
+            ? "\(metric.title), \(unitLabel.isEmpty ? metric.category : unitLabel), no data"
+            : "\(metric.title), \(unitLabel.isEmpty ? metric.category : unitLabel)")
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -535,7 +538,7 @@ struct MetricDetailView: View {
         let heroValue = latest.map { fmt($0.value) } ?? "—"
         let asOf: String = {
             guard let day = latest?.day, let d = parseDay(day) else { return "—" }
-            return "as of \(longDate(d))"
+            return String(localized: "as of \(longDate(d))")
         }()
         let fraction = value.flatMap { metricGaugeFraction(metric, value: $0) }
 
@@ -637,16 +640,20 @@ struct MetricDetailView: View {
     }
 
     /// "N readings · <range>" near the control, flagging an auto-widen when one happened.
+    /// Whole-phrase variants per count so translators never see a stitched plural.
     private func rangeCaption(effectiveRange: ExploreRange,
                               windowed: [(day: String, value: Double)],
                               windowFellBack: Bool) -> String {
         guard loaded, !series.isEmpty else { return "—" }
         let n = windowed.count
-        let unit = n == 1 ? "reading" : "readings"
         if windowFellBack {
-            return "\(n) \(unit) · sparse — widened to \(effectiveRange.name)"
+            return n == 1
+                ? String(localized: "1 reading · sparse, widened to \(effectiveRange.name)")
+                : String(localized: "\(n) readings · sparse, widened to \(effectiveRange.name)")
         }
-        return "\(n) \(unit) · \(range.name)"
+        return n == 1
+            ? String(localized: "1 reading · \(range.name)")
+            : String(localized: "\(n) readings · \(range.name)")
     }
 
     // MARK: Hero chart
@@ -656,12 +663,12 @@ struct MetricDetailView: View {
                            windowFellBack: Bool) -> some View {
         let asOf: String = {
             guard let day = latest?.day, let d = parseDay(day) else { return "—" }
-            return "as of \(longDate(d))"
+            return String(localized: "as of \(longDate(d))")
         }()
         let heroValue = latest.map { fmt($0.value) } ?? "—"
         let subtitle = windowFellBack
-            ? "Sparse — widened to \(effectiveRange.name) · \(windowed.count) readings"
-            : "\(windowed.count) readings · \(range.name)"
+            ? String(localized: "Sparse, widened to \(effectiveRange.name) · \(windowed.count) readings")
+            : String(localized: "\(windowed.count) readings · \(range.name)")
         return ChartCard(
             title: "\(metric.title)",
             subtitle: subtitle,
@@ -706,8 +713,8 @@ struct MetricDetailView: View {
             return ((cmp.direction > 0) == better)
                 ? StrandPalette.statusPositive : StrandPalette.statusCritical
         }()
-        let deltaCaption = hasDelta ? "vs prev \(effectiveRange.name)"
-            : (effectiveRange == .all ? "all history" : "no prior \(effectiveRange.name)")
+        let deltaCaption = hasDelta ? String(localized: "vs prev \(effectiveRange.name)")
+            : (effectiveRange == .all ? String(localized: "all history") : String(localized: "no prior \(effectiveRange.name)"))
 
         return LazyVGrid(
             columns: [GridItem(.adaptive(minimum: 168), spacing: NoopMetrics.gap)],
@@ -715,7 +722,8 @@ struct MetricDetailView: View {
             spacing: NoopMetrics.gap
         ) {
             StatTile(label: "Average", value: fmt(s.mean),
-                     caption: "\(s.n) days", accent: accent,
+                     caption: s.n == 1 ? String(localized: "1 day") : String(localized: "\(s.n) days"),
+                     accent: accent,
                      sparkline: windowValues.count > 1 ? windowValues : nil,
                      sparkColor: accent)
             StatTile(label: "Min", value: fmt(s.min),

@@ -82,7 +82,7 @@ struct HydrationView: View {
                             .font(StrandFont.rounded(40, weight: .bold))
                             .foregroundStyle(StrandPalette.textPrimary)
                             .monospacedDigit()
-                        Text(String(format: "of %.1f L", HydrationGoal.litres(fromML: Double(goalML))))
+                        Text(String(localized: "of \(String(format: "%.1f", HydrationGoal.litres(fromML: Double(goalML)))) L"))
                             .font(StrandFont.subhead)
                             .foregroundStyle(StrandPalette.textSecondary)
                     }

@@ -52,7 +52,7 @@ struct MindSection: View {
             }
 
             // Standing footnote — always visible, never conditional.
-            Text("Self-tracking, not a clinical assessment. If low mood persists, talk to a professional — you deserve support.")
+            Text("Self-tracking, not a clinical assessment. If low mood persists, talk to a professional. You deserve support.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -107,7 +107,7 @@ struct MindSection: View {
                     lineWidth: selected ? 1.5 : 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(MoodStore.label(for: value)) — mood \(value) of 5")
+        .accessibilityLabel("\(MoodStore.label(for: value)), mood \(value) of 5")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -150,7 +150,7 @@ struct MindSection: View {
 
     private var insightsCard: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            Text("What tracks your mood — \(moodDayCount) check-ins")
+            Text("What tracks your mood (\(moodDayCount) check-ins)")
                 .strandOverline()
             // Each correlation as its own frosted Rest-tinted insight card. The indigo wash is
             // calm and carries no valence — a link is just a link, never framed as good or bad.
@@ -203,8 +203,8 @@ struct MindSection: View {
         }
         let candidates: [(id: String, name: String, series: [(day: String, value: Double)])] = [
             ("mind-hrv", "HRV", bodySeries { $0.avgHrv }),
-            ("mind-recovery", "recovery", bodySeries { $0.recovery }),
-            ("mind-sleep", "sleep duration", bodySeries { $0.totalSleepMin }),
+            ("mind-recovery", String(localized: "recovery"), bodySeries { $0.recovery }),
+            ("mind-sleep", String(localized: "sleep duration"), bodySeries { $0.totalSleepMin }),
         ]
 
         // Correlate each candidate against mood; keep the gated survivors, take
@@ -237,15 +237,15 @@ struct MindSection: View {
     private static func moodLine(id: String, metric: String, corr: Correlation) -> MoodLine {
         let strength: String = {
             switch abs(corr.r) {
-            case ..<0.5: return "Moderate"
-            case ..<0.7: return "Strong"
-            default:     return "Very strong"
+            case ..<0.5: return String(localized: "Moderate")
+            case ..<0.7: return String(localized: "Strong")
+            default:     return String(localized: "Very strong")
             }
         }()
         let text = corr.r > 0
-            ? "Days with higher \(metric) tend to be your better-mood days."
-            : "Days with higher \(metric) tend to be your lower-mood days."
-        let caption = "\(strength) link · r = \(String(format: "%+.2f", corr.r)) · n = \(corr.n) days"
+            ? String(localized: "Days with higher \(metric) tend to be your better-mood days.")
+            : String(localized: "Days with higher \(metric) tend to be your lower-mood days.")
+        let caption = String(localized: "\(strength) link · r = \(String(format: "%+.2f", corr.r)) · n = \(corr.n) days")
         return MoodLine(id: id, text: text, caption: caption)
     }
 }

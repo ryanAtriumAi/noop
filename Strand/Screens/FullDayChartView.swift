@@ -91,7 +91,7 @@ struct FullDayChartView: View {
             Spacer()
             // #574 — owned-source scope. The strap is the owned source; "All sources" reveals the honest
             // disclosure that other sources' raw per-second streams aren't offloaded on-device.
-            SegmentedPillControl([true, false], selection: $ownedOnly) { $0 ? "Owned" : "All" }
+            SegmentedPillControl([true, false], selection: $ownedOnly) { $0 ? String(localized: "Owned") : String(localized: "All") }
                 .fixedSize()
         }
         .padding(.horizontal, NoopMetrics.space1)
@@ -141,8 +141,8 @@ struct FullDayChartView: View {
 
     private var dayLabel: String {
         let today = Repository.logicalDayStart(Date())
-        if Calendar.current.isDate(dayStart, inSameDayAs: today) { return "Today" }
-        if Calendar.current.isDate(dayStart, inSameDayAs: today.addingTimeInterval(-86_400)) { return "Yesterday" }
+        if Calendar.current.isDate(dayStart, inSameDayAs: today) { return String(localized: "Today") }
+        if Calendar.current.isDate(dayStart, inSameDayAs: today.addingTimeInterval(-86_400)) { return String(localized: "Yesterday") }
         return Self.dayFmt.string(from: dayStart)
     }
 
@@ -233,9 +233,9 @@ struct FullDayChartView: View {
             Image(systemName: zoomDomain == nil ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
                 .font(StrandFont.footnote.weight(.semibold))
             #if os(macOS)
-            Text(zoomDomain == nil ? "Scroll to zoom · drag to pan" : "Zoomed in — drag to pan")
+            Text(zoomDomain == nil ? "Scroll to zoom · drag to pan" : "Zoomed in. Drag to pan")
             #else
-            Text(zoomDomain == nil ? "Pinch to zoom · drag to pan" : "Zoomed in — drag to pan")
+            Text(zoomDomain == nil ? "Pinch to zoom · drag to pan" : "Zoomed in. Drag to pan")
             #endif
             Spacer()
             if zoomDomain != nil {
@@ -292,9 +292,10 @@ struct FullDayChartView: View {
 
     private var resolutionSubtitle: String {
         guard !series.points.isEmpty else { return "—" }
-        if series.isRaw { return "Raw · per second" }
+        if series.isRaw { return String(localized: "Raw · per second") }
         let m = series.bucketSeconds / 60
-        return m >= 1 ? "\(m)-minute average" : "\(series.bucketSeconds)-second average"
+        return m >= 1 ? String(localized: "\(m)-minute average")
+                      : String(localized: "\(series.bucketSeconds)-second average")
     }
 
     private var latestReadout: String? {

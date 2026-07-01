@@ -68,9 +68,9 @@ struct InsightsView: View {
         /// Short segment label.
         var label: String {
             switch self {
-            case .recovery: return "Charge"
+            case .recovery: return String(localized: "Charge")
             case .hrv:      return "HRV"
-            case .sleep:    return "Rest"
+            case .sleep:    return String(localized: "Rest")
             case .rhr:      return "RHR"
             }
         }
@@ -86,10 +86,10 @@ struct InsightsView: View {
         /// The human outcome name used by BehaviorInsights.sentence.
         var outcomeName: String {
             switch self {
-            case .recovery: return "Charge"
+            case .recovery: return String(localized: "Charge")
             case .hrv:      return "HRV"
-            case .sleep:    return "Rest"
-            case .rhr:      return "Resting HR"
+            case .sleep:    return String(localized: "Rest")
+            case .rhr:      return String(localized: "Resting HR")
             }
         }
         /// Whether a higher value is the "good" direction (drives tint).
@@ -121,9 +121,9 @@ struct InsightsView: View {
         var id: Int { rawValue }
         var label: String {
             switch self {
-            case .oneWeek:  return "7d"
-            case .twoWeeks: return "14d"
-            case .fourWeeks: return "28d"
+            case .oneWeek:  return String(localized: "7d")
+            case .twoWeeks: return String(localized: "14d")
+            case .fourWeeks: return String(localized: "28d")
             }
         }
     }
@@ -224,7 +224,7 @@ struct InsightsView: View {
                     if behaviours.isEmpty {
                         // No journal yet — explain, without dead-ending on a paid export.
                         NoopCard {
-                            Text("Log behaviours above — after a few days of answers, NOOP ranks how each one moves your charge, HRV and rest. Importing a WHOOP export (which includes its journal) backfills history instantly.")
+                            Text("Log behaviours above. After a few days of answers, NOOP ranks how each one moves your charge, HRV and rest. Importing a WHOOP export (which includes its journal) backfills history instantly.")
                                 .font(StrandFont.subhead)
                                 .foregroundStyle(StrandPalette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -278,7 +278,7 @@ struct InsightsView: View {
                         Text("WHAT MOVES YOU \u{203A}")
                             .font(StrandFont.overline).tracking(StrandFont.overlineTracking)
                             .foregroundStyle(StrandPalette.textPrimary)
-                        Text("Ranked, lag-aware: which of your habits actually move your Charge — plus your personal alcohol/caffeine dose-response.")
+                        Text("Ranked, lag-aware: which of your habits actually move your Charge, plus your personal alcohol/caffeine dose-response.")
                             .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -483,7 +483,7 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
             SectionHeader("Personal Experiment",
                           overline: "N-of-1 protocol",
-                          trailing: activeExperimentSnapshot?.phaseLabel ?? "Setup")
+                          trailing: activeExperimentSnapshot?.phaseLabel ?? String(localized: "Setup"))
             NoopCard {
                 if let snapshot = activeExperimentSnapshot {
                     activeExperimentCard(snapshot)
@@ -580,11 +580,11 @@ struct InsightsView: View {
             ) {
                 experimentMeasure("Baseline",
                                   value: snapshot.baselineMean.map { formatOutcome($0, as: snapshot.outcome) } ?? "—",
-                                  caption: "\(snapshot.baselineCount) days without it",
+                                  caption: String(localized: "\(snapshot.baselineCount) days without it"),
                                   tint: StrandPalette.textSecondary)
                 experimentMeasure("Intervention",
                                   value: snapshot.interventionMean.map { formatOutcome($0, as: snapshot.outcome) } ?? "—",
-                                  caption: "\(snapshot.interventionCount) logged days",
+                                  caption: String(localized: "\(snapshot.interventionCount) logged days"),
                                   tint: StrandPalette.accent)
                 experimentMeasure("Change",
                                   value: formatExperimentDelta(snapshot.delta, outcome: snapshot.outcome),
@@ -592,7 +592,7 @@ struct InsightsView: View {
                                   tint: experimentDeltaColor(snapshot))
                 experimentMeasure("Compliance",
                                   value: "\(Int(snapshot.compliance.rounded()))%",
-                                  caption: snapshot.loggedToday ? "logged today" : "not logged today",
+                                  caption: snapshot.loggedToday ? String(localized: "logged today") : String(localized: "not logged today"),
                                   tint: snapshot.loggedToday ? StrandPalette.statusPositive : StrandPalette.statusWarning)
             }
 
@@ -806,24 +806,27 @@ struct InsightsView: View {
                                       compliance: Double) -> ExperimentConfidence {
         let pairedCount = min(baselineCount, interventionCount)
         if pairedCount >= 10, compliance >= 0.65 {
-            return .init(label: "STRONGER SIGNAL", tone: .positive)
+            return .init(label: String(localized: "STRONGER SIGNAL"), tone: .positive)
         }
         if pairedCount >= 5 {
-            return .init(label: "EARLY SIGNAL", tone: .accent)
+            return .init(label: String(localized: "EARLY SIGNAL"), tone: .accent)
         }
-        return .init(label: "LOW SIGNAL", tone: .warning)
+        return .init(label: String(localized: "LOW SIGNAL"), tone: .warning)
     }
 
     private func experimentReading(_ snapshot: ExperimentSnapshot) -> String {
         guard let delta = snapshot.delta else {
-            return "Collect a few logged intervention days before reading the effect. Baseline and imported metrics stay in place."
+            return String(localized: "Collect a few logged intervention days before reading the effect. Baseline and imported metrics stay in place.")
         }
         let absDelta = formatExperimentDelta(abs(delta), outcome: snapshot.outcome, includeSign: false)
         if abs(delta) < 0.05 {
-            return "\(snapshot.outcome.outcomeName) is flat against baseline on logged intervention days."
+            return String(localized: "\(snapshot.outcome.outcomeName) is flat against baseline on logged intervention days.")
         }
+        // Whole-phrase variants per direction so translators never see a stitched better/worse fragment.
         let movedGood = snapshot.outcome.higherIsBetter ? delta > 0 : delta < 0
-        return "\(snapshot.outcome.outcomeName) is \(absDelta) \(movedGood ? "better" : "worse") than baseline on days you logged this behaviour."
+        return movedGood
+            ? String(localized: "\(snapshot.outcome.outcomeName) is \(absDelta) better than baseline on days you logged this behaviour.")
+            : String(localized: "\(snapshot.outcome.outcomeName) is \(absDelta) worse than baseline on days you logged this behaviour.")
     }
 
     private func experimentDeltaColor(_ snapshot: ExperimentSnapshot) -> Color {
@@ -894,7 +897,8 @@ struct InsightsView: View {
 
         var progress: Double { min(1, Double(daysElapsed) / Double(max(durationDays, 1))) }
         var phaseLabel: String {
-            daysElapsed >= durationDays ? "COMPLETE" : "DAY \(daysElapsed)/\(durationDays)"
+            daysElapsed >= durationDays ? String(localized: "COMPLETE")
+                                        : String(localized: "DAY \(daysElapsed)/\(durationDays)")
         }
         var phaseTone: StrandTone { daysElapsed >= durationDays ? .positive : .accent }
         var delta: Double? {
@@ -902,8 +906,8 @@ struct InsightsView: View {
             return interventionMean - baselineMean
         }
         var deltaCaption: String {
-            guard delta != nil else { return "needs baseline + logged days" }
-            return "vs behaviour-free baseline"
+            guard delta != nil else { return String(localized: "needs baseline + logged days") }
+            return String(localized: "vs behaviour-free baseline")
         }
     }
 
@@ -940,8 +944,7 @@ struct InsightsView: View {
 
     private var noEffects: some View {
         NoopCard {
-            Text("Not enough overlap between your journal answers and \(outcome.outcomeName.lowercased()) "
-                + "to measure an effect yet. Keep logging — effects need days both with and without each behaviour.")
+            Text(String(localized: "Not enough overlap between your journal answers and \(outcome.outcomeName.lowercased()) to measure an effect yet. Keep logging. Effects need days both with and without each behaviour."))
                 .font(StrandFont.subhead)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1036,9 +1039,10 @@ struct InsightsView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(sentence
-            + " Cohen's d \(String(format: "%.2f", e.cohensD)). "
-            + (e.significant ? "Statistically significant." : "Exploratory, not yet significant."))
+        // Whole-string key per variant (never a concatenated localized tail on an a11y label).
+        .accessibilityLabel(e.significant
+            ? String(localized: "\(sentence) Cohen's d \(String(format: "%.2f", e.cohensD)). Statistically significant.")
+            : String(localized: "\(sentence) Cohen's d \(String(format: "%.2f", e.cohensD)). Exploratory, not yet significant."))
     }
 
     // MARK: - Metric relationships section
@@ -1102,19 +1106,19 @@ struct InsightsView: View {
                           alignment: .leading, spacing: NoopMetrics.gap) {
                     StatTile(label: "Next morning",
                              value: "\(Int(cost.meanNextMorning.rounded()))",
-                             caption: "Charge · \(pointsLabel) pts",
+                             caption: String(localized: "Charge · \(pointsLabel) pts"),
                              accent: accent)
                     StatTile(label: "Rest baseline",
                              value: "\(Int(cost.baselineMean.rounded()))",
-                             caption: "untouched days",
+                             caption: String(localized: "untouched days"),
                              accent: StrandPalette.textPrimary)
                     StatTile(label: "Bounce back",
                              value: cost.daysToBaseline.map { "\($0)d" } ?? "—",
-                             caption: cost.daysToBaseline != nil ? "to baseline" : "not within 7d",
+                             caption: cost.daysToBaseline != nil ? String(localized: "to baseline") : String(localized: "not within 7d"),
                              accent: StrandPalette.chargeColor)
                     StatTile(label: "Sessions",
                              value: "\(cost.n)",
-                             caption: cost.confidence == .solid ? "solid" : "building",
+                             caption: cost.confidence == .solid ? String(localized: "solid") : String(localized: "building"),
                              accent: StrandPalette.textPrimary)
                 }
             }
@@ -1168,24 +1172,24 @@ struct InsightsView: View {
         if let c = CorrelationEngine.pearson(
             CorrelationEngine.alignByDay(series("sleep_performance"), series("recovery"))) {
             out.append(.init(id: "sleep-rec",
-                             title: "Rest ↔ Charge",
-                             blurb: "How closely a good night tracks next-morning charge.",
+                             title: String(localized: "Rest ↔ Charge"),
+                             blurb: String(localized: "How closely a good night tracks next-morning charge."),
                              corr: c))
         }
         // HRV ↔ recovery (same day).
         if let c = CorrelationEngine.pearson(
             CorrelationEngine.alignByDay(series("hrv"), series("recovery"))) {
             out.append(.init(id: "hrv-rec",
-                             title: "HRV ↔ Charge",
-                             blurb: "Heart-rate variability as the engine behind your charge score.",
+                             title: String(localized: "HRV ↔ Charge"),
+                             blurb: String(localized: "Heart-rate variability as the engine behind your charge score."),
                              corr: c))
         }
         // Resting HR ↔ recovery (same day) — expected to be negative.
         if let c = CorrelationEngine.pearson(
             CorrelationEngine.alignByDay(series("rhr"), series("recovery"))) {
             out.append(.init(id: "rhr-rec",
-                             title: "Resting HR ↔ Charge",
-                             blurb: "A lower resting heart rate usually means a higher charge.",
+                             title: String(localized: "Resting HR ↔ Charge"),
+                             blurb: String(localized: "A lower resting heart rate usually means a higher charge."),
                              corr: c))
         }
         // Today's recovery ↔ NEXT-day recovery (1-day lag) as a strain/carry-over proxy.
@@ -1193,8 +1197,8 @@ struct InsightsView: View {
         //  how much yesterday carries into today.)
         if let c = CorrelationEngine.lagged(x: series("recovery"), y: series("recovery"), lagDays: 1) {
             out.append(.init(id: "rec-lag",
-                             title: "Charge → Next-day charge",
-                             blurb: "How much one day's charge carries into the next.",
+                             title: String(localized: "Charge → Next-day charge"),
+                             blurb: String(localized: "How much one day's charge carries into the next."),
                              corr: c))
         }
 
@@ -1277,21 +1281,21 @@ struct InsightsView: View {
     /// Cohen's d → conventional magnitude word.
     private func effectMagnitudeWord(_ d: Double) -> String {
         switch abs(d) {
-        case ..<0.2:  return "negligible"
-        case ..<0.5:  return "small"
-        case ..<0.8:  return "moderate"
-        default:      return "large"
+        case ..<0.2:  return String(localized: "negligible")
+        case ..<0.5:  return String(localized: "small")
+        case ..<0.8:  return String(localized: "moderate")
+        default:      return String(localized: "large")
         }
     }
 
     /// |r| → strength word.
     private func strengthWord(_ r: Double) -> String {
         switch abs(r) {
-        case ..<0.1:  return "no"
-        case ..<0.3:  return "a weak"
-        case ..<0.5:  return "a moderate"
-        case ..<0.7:  return "a strong"
-        default:      return "a very strong"
+        case ..<0.1:  return String(localized: "no")
+        case ..<0.3:  return String(localized: "a weak")
+        case ..<0.5:  return String(localized: "a moderate")
+        case ..<0.7:  return String(localized: "a strong")
+        default:      return String(localized: "a very strong")
         }
     }
 
@@ -1304,10 +1308,9 @@ struct InsightsView: View {
 
     private func relationshipSentence(_ rel: Relationship) -> String {
         let r = rel.corr.r
-        let dir = r > 0 ? "positive" : (r < 0 ? "negative" : "flat")
+        let dir = r > 0 ? String(localized: "positive") : (r < 0 ? String(localized: "negative") : String(localized: "flat"))
         let strength = strengthWord(r)
-        return "\(strength.capitalizedFirst) \(dir) relationship "
-            + "(r = \(String(format: "%.2f", r)), n = \(rel.corr.n))."
+        return String(localized: "\(strength.capitalizedFirst) \(dir) relationship (r = \(String(format: "%.2f", r)), n = \(rel.corr.n)).")
     }
 }
 

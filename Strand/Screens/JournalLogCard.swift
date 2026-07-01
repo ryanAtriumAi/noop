@@ -50,7 +50,7 @@ struct JournalLogCard: View {
                          ? "Remove a question to tidy your list. Custom questions are deleted; the built-in ones are hidden and can be restored below."
                          : dayOffset == -1
                          ? "Logging ahead for tomorrow: today's activities inform tomorrow's recovery, just as yesterday's are reflected in today's. Tomorrow's answers line up with tomorrow's morning."
-                         : "Answers are about the night and day leading into this morning — the same attribution a WHOOP export uses, so logged and imported days line up.")
+                         : "Answers are about the night and day leading into this morning, the same attribution a WHOOP export uses, so logged and imported days line up.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
