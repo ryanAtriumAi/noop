@@ -3728,16 +3728,11 @@ struct TodayView: View {
 
         // #316 / @63, the selected day's representative activity class for the Steps tile icon. Reads the
         // day's step samples (now carrying `activityClass` after the v19 column) and takes the LAST non-nil
-        // class in the window as "what the wrist was doing most recently today". Only the owning device's
-        // strap samples are consulted; nil (no classed sample) hides the icon. Wrapped in try? so a read
-        // hiccup just drops the optional icon, never the whole day-scoped load.
-        if let store = await repo.storeHandle() {
-            let owner = Repository.whoopSource
-            let daySteps = (try? await store.stepSamples(deviceId: owner, from: windowStart, to: windowEnd, limit: 200_000)) ?? []
-            stepActivityClassToday = daySteps.last(where: { $0.activityClass != nil })?.activityClass
-        } else {
-            stepActivityClassToday = nil
-        }
+        // class in the window as "what the wrist was doing most recently today". Reads the active strap +
+        // canonical UNION (like the HR curve / Effort above): a re-added strap banks its live step samples
+        // under its OWN fresh id, so a read pinned to the canonical "my-whoop" would drop the icon for a
+        // re-added strap (the #904/#908 family). nil (no classed sample) hides the icon.
+        stepActivityClassToday = await repo.stepActivityClassLatest(from: windowStart, to: windowEnd)
 
         // #860 item 1: the launch auto-land (#605/#739 "snap to the most recent data day when today is
         // empty") is RETIRED here. A fresh launch lands on today via `launchDayOffset` against the plain

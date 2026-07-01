@@ -766,6 +766,39 @@ final class Repository: ObservableObject {
         return byStart.values.sorted { $0.ts < $1.ts }
     }
 
+    /// The latest (greatest-ts) non-nil @63 activity class over `[from, to]`, read across the active strap +
+    /// canonical UNION (`importedReadIds`), for the Steps tile icon (#316 / @63). A re-added strap banks its
+    /// LIVE step samples (which carry `activityClass`) under its OWN fresh id via the Collector, exactly like
+    /// HR, so a read pinned to the canonical "my-whoop" would return nothing and the tile icon would vanish for
+    /// a re-added strap (the #904/#908 family). Reading the union keeps the icon whichever id the samples
+    /// landed under; a single-device install reads one id (byte-identical). Ties on ts favour the active strap
+    /// (its list is scanned first by `latestActivityClass`).
+    func stepActivityClassLatest(from: Int, to: Int) async -> Int? {
+        guard let store = await ensureStore() else { return nil }
+        var perId: [[StepSample]] = []
+        for id in importedReadIds {   // active strap FIRST so it wins a ts tie
+            perId.append((try? await store.stepSamples(deviceId: id, from: from, to: to, limit: 200_000)) ?? [])
+        }
+        return Self.latestActivityClass(perId)
+    }
+
+    /// Pure pick of the latest classed activity across the union's per-id step lists: the non-nil
+    /// `activityClass` on the sample with the greatest ts, resolving a ts tie in favour of the FIRST list (the
+    /// active strap, mirroring the union's active-wins rule). Static + pure so it's unit-testable without a
+    /// store. A single non-empty list reduces to "last non-nil class in that list".
+    nonisolated static func latestActivityClass(_ perId: [[StepSample]]) -> Int? {
+        var bestTs = Int.min
+        var bestClass: Int? = nil
+        for list in perId {
+            for s in list where s.activityClass != nil {
+                // Strict `>` keeps the FIRST list's sample on an exact ts tie: earlier lists are scanned
+                // first, so a later list's equal-ts sample never overwrites the active strap's.
+                if s.ts > bestTs { bestTs = s.ts; bestClass = s.activityClass }
+            }
+        }
+        return bestClass
+    }
+
     func sleepSessions(from: Int, to: Int, limit: Int = 100) async -> [CachedSleepSession] {
         guard let store = await ensureStore() else { return [] }
         return await unionSleepSessions(store: store, from: from, to: to, limit: limit)

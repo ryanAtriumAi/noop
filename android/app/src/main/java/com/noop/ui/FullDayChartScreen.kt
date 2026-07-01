@@ -54,7 +54,12 @@ private enum class TimelineMetric(val title: String) {
 @Composable
 fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
-    val deviceId = "my-whoop"
+    // #908: the deep timeline follows the ACTIVE strap id, not a hardcoded "my-whoop". A strap re-added
+    // through the device manager banks its raw under its own fresh id, so a pinned "my-whoop" read left
+    // the timeline empty. HR additionally reads the active ∪ canonical union (see [readTimeline]) so the
+    // re-added strap's live curve AND the canonical import history both surface. Single-WHOOP install
+    // resolves to "my-whoop" ⇒ byte-identical reads.
+    val deviceId = vm.activeStrapId
     val recentDays by vm.recentDays.collectAsStateWithLifecycle()
 
     // Today's local calendar midnight — the clamp the day stepper can never pass.
@@ -287,11 +292,14 @@ private suspend fun readTimeline(
     // CPU work moves off the UI thread. Output is unchanged.
     val repo = vm.repo
     if (metric == TimelineMetric.Hr) {
+        // #908: HR rides the active strap ∪ canonical "my-whoop" union so a re-added strap's live curve and
+        // the canonical import history both render (matches Swift Repository.timelineSeries). [deviceId] is
+        // already the active strap id; a single-WHOOP install resolves to "my-whoop" ⇒ one id ⇒ same read.
         return@withContext if (bucket <= 1L) {
-            runCatching { repo.hrSamples(deviceId, from, to, limit = 200_000) }.getOrDefault(emptyList())
+            runCatching { repo.hrSamplesUnion(deviceId, from, to, limit = 200_000) }.getOrDefault(emptyList())
                 .map { TimelinePoint(it.ts, it.bpm.toDouble()) }
         } else {
-            runCatching { repo.hrBuckets(deviceId, from, to, bucket) }.getOrDefault(emptyList())
+            runCatching { repo.hrBucketsUnion(deviceId, from, to, bucket) }.getOrDefault(emptyList())
                 .map { TimelinePoint(it.bucket, it.avgBpm) }
         }
     }

@@ -623,9 +623,12 @@ fun TodayScreen(
         val nextStart = selectedDay.plusDays(1).atStartOfDay(zone).toEpochSecond()
         val now = System.currentTimeMillis() / 1000
         val end = if (selectedDayOffset == 0) now else (nextStart - 1)
+        // #908 family: read the active strap ∪ canonical "my-whoop" union, NOT a hardcoded "my-whoop". A strap
+        // re-added through the device manager banks its live step samples (which carry the @63 class) under its
+        // own fresh id, so a pinned "my-whoop" read dropped the tile icon for a re-added strap. Single-WHOOP ⇒
+        // one id ⇒ byte-identical read. Mirrors the iOS Repository.stepActivityClassLatest union.
         stepActivityClassForDay = runCatching {
-            viewModel.repo.stepSamples("my-whoop", start, end)
-                .lastOrNull { it.activityClass != null }?.activityClass
+            viewModel.repo.stepActivityClassLatestUnion(viewModel.activeStrapId, start, end)
         }.getOrNull()
     }
 
@@ -698,7 +701,12 @@ fun TodayScreen(
             val zone = ZoneId.systemDefault()
             val start = selectedDay.atStartOfDay(zone).toEpochSecond()
             val now = System.currentTimeMillis() / 1000
-            val todayHr = runCatching { viewModel.repo.hrSamples("my-whoop", start, now) }.getOrDefault(emptyList())
+            // #908: read the active strap ∪ canonical "my-whoop" union, NOT a hardcoded "my-whoop". A strap
+            // re-added through the device manager banks its live HR under its own fresh id, so a pinned
+            // "my-whoop" read returned nothing and Effort integrated to 0 off an empty series. Single-WHOOP
+            // install resolves to "my-whoop" ⇒ one id ⇒ byte-identical read.
+            val todayHr = runCatching { viewModel.repo.hrSamplesUnion(viewModel.activeStrapId, start, now) }
+                .getOrDefault(emptyList())
             // effMaxHR resolution matches AnalyticsEngine: manual HR-max override first, else Tanaka from age.
             val effMaxHR = profileStore.hrMaxOverride.takeIf { it > 0 }?.toDouble()
                 ?: if (profileStore.age > 0) StrainScorer.tanakaHRmax(profileStore.age.toDouble()) else null
@@ -3933,7 +3941,10 @@ private fun HeartRateTrendCard(
         val nextStart = selectedDay.plusDays(1).atStartOfDay(zone).toEpochSecond()
         val now = System.currentTimeMillis() / 1000
         val end = if (selectedDay == today) now else (nextStart - 1)
-        buckets = viewModel.repo.hrBuckets("my-whoop", start, end, 300L)
+        // #908: the Today HR curve reads the active strap ∪ canonical "my-whoop" union, NOT a hardcoded
+        // "my-whoop". A strap re-added via the device manager banks live HR under its own fresh id, so a
+        // pinned read showed the "no heart rate banked yet today" empty state. Single-WHOOP ⇒ one id ⇒ same.
+        buckets = viewModel.repo.hrBucketsUnion(viewModel.activeStrapId, start, end, 300L)
         // The sleep that ended within the chart window (the night before / this morning), anchors
         // the band + the Charge-at-wake marker. A wide lower bound catches an onset before midnight.
         sleepToday = runCatching {

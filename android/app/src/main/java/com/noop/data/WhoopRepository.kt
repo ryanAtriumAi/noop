@@ -413,6 +413,20 @@ class WhoopRepository(private val dao: WhoopDao) {
     suspend fun hrSamples(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT) =
         dao.hrSamples(deviceId, from, to, limit)
 
+    /**
+     * HR samples over the read-side UNION of the active strap id AND the canonical "my-whoop" (SPINE /
+     * #814 + HIGH-2), deduped by ts with the active strap winning. This is the Kotlin twin of the Swift
+     * [com.noop] Repository.hrSamples(from:to:) union overload.
+     *
+     * #908: a strap re-added through the in-app device manager banks its LIVE raw under its OWN fresh id
+     * (e.g. "whoop-<uuid>"), NOT "my-whoop". A Today-curve / live-Effort read pinned to the hardcoded
+     * "my-whoop" then finds NOTHING and the day looks frozen (and Effort integrates to 0 off an empty
+     * series). Reading the union surfaces the re-added strap's live data AND the canonical import history.
+     * A single-WHOOP install resolves [activeDeviceId] to "my-whoop" ⇒ ONE id ⇒ byte-identical read.
+     */
+    suspend fun hrSamplesUnion(activeDeviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT):
+        List<HrSample> = mergeHrByTs(importedSourceIds(activeDeviceId).map { dao.hrSamples(it, from, to, limit) })
+
     /** Raw measured HR only (no v26 PPG-derived union) for the raw-sensor diagnostic export. */
     suspend fun rawHrSamples(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT) =
         dao.rawHrSamples(deviceId, from, to, limit)
@@ -424,6 +438,18 @@ class WhoopRepository(private val dao: WhoopDao) {
     /** Downsampled HR (mean bpm per [bucketSeconds]) for the strap, for the Today 24h trend chart. */
     suspend fun hrBuckets(deviceId: String, from: Long, to: Long, bucketSeconds: Long = 300L) =
         dao.hrBuckets(deviceId, from, to, bucketSeconds)
+
+    /**
+     * Downsampled HR buckets over the read-side UNION of the active strap id AND the canonical "my-whoop"
+     * (SPINE / #814 + HIGH-2), deduped by bucket start with the active strap winning. Kotlin twin of the
+     * Swift Repository.hrBuckets(from:to:bucketSeconds:) union overload. #908: keeps the Today HR curve
+     * pointed at whichever id the re-added strap actually banks under. Single-WHOOP install ⇒ one id ⇒
+     * byte-identical read.
+     */
+    suspend fun hrBucketsUnion(activeDeviceId: String, from: Long, to: Long, bucketSeconds: Long = 300L):
+        List<HrBucket> = mergeHrBucketsByStart(
+            importedSourceIds(activeDeviceId).map { dao.hrBuckets(it, from, to, bucketSeconds) },
+        )
 
     /**
      * DISPLAY-ONLY: reconcile a workout's shown HR with the strap trace that actually drives its
@@ -491,6 +517,18 @@ class WhoopRepository(private val dao: WhoopDao) {
 
     suspend fun stepSamples(deviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT) =
         dao.stepSamples(deviceId, from, to, limit)
+
+    /**
+     * The latest (greatest-ts) non-null @63 activity class over [from, to], read across the active strap ∪
+     * canonical "my-whoop" union ([importedSourceIds]), for the Steps tile icon (#316 / @63). Kotlin twin of
+     * the Swift Repository.stepActivityClassLatest(from:to:). #908 family: a re-added strap banks its LIVE step
+     * samples (which carry [com.noop.data.StepSample.activityClass]) under its OWN fresh id, exactly like HR,
+     * so a read pinned to the canonical "my-whoop" returned nothing and the tile icon vanished for a re-added
+     * strap. A single-WHOOP install resolves to one id ⇒ byte-identical read. A ts tie favours the active strap
+     * (its list is scanned first by [latestActivityClass]).
+     */
+    suspend fun stepActivityClassLatestUnion(activeDeviceId: String, from: Long, to: Long, limit: Int = DEFAULT_LIMIT):
+        Int? = latestActivityClass(importedSourceIds(activeDeviceId).map { dao.stepSamples(it, from, to, limit) })
 
     /** Delete a computed source's [sport] workouts in [from, to] (makes re-detection idempotent). (#78) */
     suspend fun deleteComputedWorkouts(deviceId: String, sport: String, from: Long, to: Long) =
@@ -1157,6 +1195,52 @@ class WhoopRepository(private val dao: WhoopDao) {
             // First list wins: only fill a day a later (lower-precedence) list covers and an earlier one didn't.
             for (list in lists) for (d in list) byDay.putIfAbsent(d.day, d)
             return byDay.values.toList()
+        }
+
+        /**
+         * Merge HR sample lists (the active-id ∪ canonical "my-whoop" union) into one time-ordered
+         * stream, deduped by ts with the FIRST list (the active strap) winning on a tie. Kotlin twin of
+         * the Swift Repository.hrSamples(from:to:) union body. A single-id read (single-WHOOP install)
+         * returns that list untouched, so the union is byte-identical there. (#908 / SPINE #814.)
+         */
+        internal fun mergeHrByTs(lists: List<List<HrSample>>): List<HrSample> {
+            if (lists.size == 1) return lists[0]
+            val byTs = LinkedHashMap<Long, HrSample>()
+            for (list in lists) for (s in list) byTs.putIfAbsent(s.ts, s)
+            return byTs.values.sortedBy { it.ts }
+        }
+
+        /**
+         * Merge HR bucket lists (the active-id ∪ canonical union) into one time-ordered stream, deduped
+         * by bucket start with the FIRST list (the active strap) winning on a tie. Kotlin twin of the
+         * Swift Repository.hrBuckets(from:to:) union body. Single-id ⇒ byte-identical. (#908 / SPINE #814.)
+         */
+        internal fun mergeHrBucketsByStart(lists: List<List<HrBucket>>): List<HrBucket> {
+            if (lists.size == 1) return lists[0]
+            val byStart = LinkedHashMap<Long, HrBucket>()
+            for (list in lists) for (b in list) byStart.putIfAbsent(b.bucket, b)
+            return byStart.values.sortedBy { it.bucket }
+        }
+
+        /**
+         * Pure pick of the latest classed @63 activity across the union's per-id step-sample lists: the
+         * non-null [com.noop.data.StepSample.activityClass] on the greatest-ts sample, resolving a ts tie in
+         * favour of the FIRST list (the active strap, mirroring the union's active-wins rule). Kotlin twin of
+         * the Swift Repository.latestActivityClass. A single non-empty list reduces to "last non-null class in
+         * that list"; an empty union returns null (no icon). (#908 family / #316.)
+         */
+        internal fun latestActivityClass(lists: List<List<StepSample>>): Int? {
+            var bestTs = Long.MIN_VALUE
+            var bestClass: Int? = null
+            for (list in lists) for (s in list) {
+                // Strict > keeps the FIRST list's sample on an exact ts tie: earlier lists are scanned first,
+                // so a later list's equal-ts sample never overwrites the active strap's.
+                if (s.activityClass != null && s.ts > bestTs) {
+                    bestTs = s.ts
+                    bestClass = s.activityClass
+                }
+            }
+            return bestClass
         }
 
         /**
