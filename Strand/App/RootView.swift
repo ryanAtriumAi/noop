@@ -274,15 +274,23 @@ struct RootView: View {
             .background(StrandPalette.surfaceBase)
             .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
         } detail: {
-            detail
-                // Tab/section crossfade — README §Motion: "switching tabs uses a crossfade ~240ms",
-                // global calm easing cubic-bezier(0.22,1,0.36,1). Opacity swap between detail roots
-                // keyed on the selected nav item; restrained (no slide) for the desktop sidebar shell.
-                .id(selection ?? .today)
-                .transition(.opacity)
-                .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24), value: selection)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(StrandPalette.surfaceBase.ignoresSafeArea())
+            // The crossfade `.id` lives on the INNER switched content, not on the detail-column root
+            // the split view hosts. A stable ZStack hosts the column; only the `detail` child inside it
+            // carries `.id(selection)`. Keeping the split view's hosted view identity stable across
+            // sidebar switches stops SwiftUI cold-mounting the whole detail column every time (#833):
+            // an `.id` on the column ROOT re-created the hosted subtree on each switch, cold-starting
+            // the target screen and re-running its O(full-history) @MainActor reads, which froze macOS
+            // on a large DB. The child still gets a per-selection identity, so the opacity crossfade
+            // (README §Motion: "switching tabs uses a crossfade ~240ms", calm cubic-bezier
+            // (0.22,1,0.36,1)) fires unchanged: it inserts/removes the id'd child on each change.
+            ZStack {
+                detail
+                    .id(selection ?? .today)
+                    .transition(.opacity)
+            }
+            .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.24), value: selection)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(StrandPalette.surfaceBase.ignoresSafeArea())
         }
         .task {
             await repo.refresh()

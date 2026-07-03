@@ -19396,6 +19396,34 @@
         }
       }
     },
+    "CONNECTED": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CONECTADO"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CONNESSO"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已連線"
+          }
+        }
+      }
+    },
     "CONNECTING": {
       "localizations": {
         "es": {
@@ -71706,6 +71734,34 @@
         }
       }
     },
+    "Sleep quality": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calidad del sueño"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualità del sonno"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "睡眠质量"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "睡眠品質"
+          }
+        }
+      }
+    },
     "Sleep score": {
       "localizations": {
         "es": {
@@ -89665,6 +89721,62 @@
         }
       }
     },
+    "a strong night, supporting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una buena noche, favorece la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una notte forte, favorisce il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "睡得很好，有助于恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "睡得很好，有助於恢復"
+          }
+        }
+      }
+    },
+    "a typical night": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una noche típica"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "una notte tipica"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一个平常的夜晚"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一個平常的夜晚"
+          }
+        }
+      }
+    },
     "a very strong": {
       "localizations": {
         "es": {
@@ -89745,6 +89857,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "與你的年齡相仿"
+          }
+        }
+      }
+    },
+    "above baseline, limiting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "por encima de tu línea base, limita la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sopra la linea di base, limita il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高于基线，限制恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高於基線，限制恢復"
+          }
+        }
+      }
+    },
+    "above baseline, supporting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "por encima de tu línea base, favorece la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sopra la linea di base, favorisce il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高于基线，有助于恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高於基線，有助於恢復"
           }
         }
       }
@@ -90115,6 +90283,90 @@
         }
       }
     },
+    "below a good night, limiting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "por debajo de una buena noche, limita la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sotto una buona notte, limita il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不及一夜好眠，限制恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不及一夜好眠，限制恢復"
+          }
+        }
+      }
+    },
+    "below baseline, limiting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "por debajo de tu línea base, limita la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sotto la linea di base, limita il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低于基线，限制恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低於基線，限制恢復"
+          }
+        }
+      }
+    },
+    "below baseline, supporting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "por debajo de tu línea base, favorece la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sotto la linea di base, favorisce il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低于基线，有助于恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低於基線，有助於恢復"
+          }
+        }
+      }
+    },
     "bpm": {
       "localizations": {
         "de": {
@@ -90303,6 +90555,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "cm"
+          }
+        }
+      }
+    },
+    "cooler than baseline, limiting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "más fría que tu línea base, limita la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "più fredda della linea di base, limita il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低于基线温度，限制恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低於基線溫度，限制恢復"
           }
         }
       }
@@ -91941,6 +92221,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "n.s."
+          }
+        }
+      }
+    },
+    "near baseline": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cerca de tu línea base"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vicino alla linea di base"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接近基线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接近基線"
           }
         }
       }
@@ -94615,6 +94923,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "對比一般水準，"
+          }
+        }
+      }
+    },
+    "warmer than baseline, limiting recovery": {
+      "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "más cálida que tu línea base, limita la recuperación"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "più calda della linea di base, limita il recupero"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高于基线温度，限制恢复"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高於基線溫度，限制恢復"
           }
         }
       }

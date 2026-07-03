@@ -62,10 +62,16 @@ enum ChargeBreakdownFormat {
             case (false, false): pts = String(localized: "down \(n) points")
             }
         }
+        // The engine's label + verdict are catalog KEYS (see ChargeDrivers.swift). Interpolating them
+        // raw into a String(localized:) template would leave them English in a localized build (the
+        // template is the lookup key, its substitutions are not re-localized), so look each up first
+        // and interpolate the already-localized text. valueText/baselineText are numeric read-outs.
+        let label = String(localized: String.LocalizationValue(d.label))
+        let verdict = String(localized: String.LocalizationValue(d.verdict))
         if d.baselineText.isEmpty {
-            return String(localized: "\(d.label): \(pts). \(d.valueText). \(d.verdict).")
+            return String(localized: "\(label): \(pts). \(d.valueText). \(verdict).")
         }
-        return String(localized: "\(d.label): \(pts). \(d.valueText), \(d.baselineText). \(d.verdict).")
+        return String(localized: "\(label): \(pts). \(d.valueText), \(d.baselineText). \(verdict).")
     }
 
     // MARK: - Score-confidence tier chip (A3)
@@ -236,7 +242,7 @@ struct ChargeDriverRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(driver.label)
+                Text(LocalizedStringKey(driver.label))
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textPrimary)
                 Spacer(minLength: 8)
@@ -263,7 +269,7 @@ struct ChargeDriverRow: View {
             // A thin magnitude bar tinted to the chip hue, reading the term's share of the biggest mover.
             PipBar(value: magnitude, range: 0...barMax, segments: 16, tint: chipHue, height: 6)
                 .accessibilityHidden(true)
-            Text(driver.verdict)
+            Text(LocalizedStringKey(driver.verdict))
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
