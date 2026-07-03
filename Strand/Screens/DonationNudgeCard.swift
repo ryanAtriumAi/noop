@@ -64,7 +64,7 @@ struct DonationNudgeCard: View {
                             .foregroundStyle(StrandPalette.textPrimary)
                         Spacer()
                     }
-                    Text("A WHOOP membership runs $300–480 a year, for life. NOOP does this for free: one person, no servers, no subscription.")
+                    Text("A WHOOP membership runs $300-480 a year, for life. NOOP does this for free: one person, no servers, no subscription.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

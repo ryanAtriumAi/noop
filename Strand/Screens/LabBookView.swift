@@ -274,7 +274,7 @@ struct LabBookView: View {
                 await repo.refresh()   // re-resolves the lab-book projection into Compare/Explore/Coach
                 await load()
                 var msg = String(localized: "Imported \(result.importedReadings) readings (\(result.distinctMarkers) markers)")
-                if let a = result.earliestDay, let b = result.latestDay, a != b { msg += " · \(a) – \(b)" }
+                if let a = result.earliestDay, let b = result.latestDay, a != b { msg += " · \(a)-\(b)" }
                 if result.skippedRows > 0 {
                     // Whole-phrase variants per count; the separator stays outside the localized key.
                     msg += " · " + (result.skippedRows == 1

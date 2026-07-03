@@ -612,8 +612,8 @@ struct SettingsView: View {
                 // Display-only; the stored value never changes, so a flip just re-labels every Effort read-out.
                 FormRow(label: "Effort scale") {
                     Picker("Effort scale", selection: $effortScaleRaw) {
-                        Text("0–100").tag(EffortScale.hundred.rawValue)
-                        Text("0–21").tag(EffortScale.whoop.rawValue)
+                        Text("0-100").tag(EffortScale.hundred.rawValue)
+                        Text("0-21").tag(EffortScale.whoop.rawValue)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)

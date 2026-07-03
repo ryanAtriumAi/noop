@@ -366,7 +366,7 @@ struct DataSourcesView: View {
                 try await store.upsertMetricSeries(points, deviceId: NutritionCsvImporter.sourceId)
                 await repo.refresh()
                 var msg = String(localized: "Imported \(result.importedDays) days (\(points.count) values)")
-                if let a = result.earliestDay, let b = result.latestDay, a != b { msg += " · \(a) – \(b)" }
+                if let a = result.earliestDay, let b = result.latestDay, a != b { msg += " · \(a)-\(b)" }
                 if result.skippedRows > 0 {
                     // Whole-phrase variants per count; the separator stays outside the localized key.
                     msg += " · " + (result.skippedRows == 1
@@ -440,7 +440,7 @@ struct DataSourcesView: View {
                 if let a = result.earliest, let b = result.latest {
                     let span = liftingDayFormatter
                     let lo = span.string(from: a), hi = span.string(from: b)
-                    if lo != hi { msg += " · \(lo) – \(hi)" }
+                    if lo != hi { msg += " · \(lo)-\(hi)" }
                 }
                 if result.skipped > 0 { msg += " · " + String(localized: "\(result.skipped) skipped") }
                 liftingSummary = msg

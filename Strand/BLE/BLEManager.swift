@@ -1650,9 +1650,9 @@ public final class BLEManager: NSObject, ObservableObject {
             let sustainedEmpty = emptySyncTracker.recordCompletedSync(
                 bankedSensorRecords: bankedSensorRecords, consoleOnly: bankedNothing)
             if unarchived > 0 {
-                state.lastSyncError = "Synced, but \(archived + unarchived) record(s) couldn't be decoded (unrecognised strap firmware layout), and the on-device archive is full — the \(unarchived) newest weren't preserved. Please share a strap log so the layout can be mapped."
+                state.lastSyncError = "Synced, but \(archived + unarchived) record(s) couldn't be decoded (unrecognised strap firmware layout), and the on-device archive is full - the \(unarchived) newest weren't preserved. Please share a strap log so the layout can be mapped."
             } else if archived > 0 {
-                state.lastSyncError = "Synced, but \(archived) record(s) couldn't be decoded (unrecognised strap firmware layout). The raw bytes were saved on this Mac — please share a strap log so the layout can be mapped."
+                state.lastSyncError = "Synced, but \(archived) record(s) couldn't be decoded (unrecognised strap firmware layout). The raw bytes were saved on this Mac - please share a strap log so the layout can be mapped."
             } else if bankedNothing {
                 // #77 / #214 family: the offload COMPLETED but the strap handed over no sensor records
                 // at all — either console/diagnostic output across many chunks, OR a near-empty
@@ -1664,7 +1664,7 @@ public final class BLEManager: NSObject, ObservableObject {
                     : "metadata-only, 0 sensor rows persisted"
                 log("Backfill: completed but the strap banked no sensor history (\(detail)); consecutive empty syncs = \(emptySyncTracker.consecutiveEmptySyncs).")
                 state.lastSyncError = sustainedEmpty
-                    ? "Synced, but your strap had no stored history to hand over — only its diagnostic output. This usually means its clock has lost sync, so it isn't saving data to flash. Fully charge it to 100%, then reconnect, and it should start banking again."
+                    ? "Synced, but your strap had no stored history to hand over - only its diagnostic output. This usually means its clock has lost sync, so it isn't saving data to flash. Fully charge it to 100%, then reconnect, and it should start banking again."
                     : nil
             } else {
                 state.lastSyncError = nil
@@ -1708,7 +1708,7 @@ public final class BLEManager: NSObject, ObservableObject {
                     state.lastSyncError = nil
                 }
             } else {
-                state.lastSyncError = "Sync interrupted — the strap went quiet. It will retry on the next sync."
+                state.lastSyncError = "Sync interrupted - the strap went quiet. It will retry on the next sync."
             }
         }
         checkStrapLiveness()         // safety-net: strap ahead of us AND our frontier frozen ⇒ stuck?
@@ -2100,7 +2100,7 @@ public final class BLEManager: NSObject, ObservableObject {
         // re-read overwrites this the moment it arrives.
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(8)) { [weak self] in
             guard let self, self.state.renameStatus == "Renaming…" else { return }
-            self.state.renameStatus = "Rename sent — reconnect your strap to confirm the new name."
+            self.state.renameStatus = "Rename sent - reconnect your strap to confirm the new name."
             self.log("Strap rename: no ack within 8s — firmware may apply it on reboot/reconnect.")
         }
     }
@@ -2695,7 +2695,7 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
             }
             if state.reconnectGuide == nil {
                 state.reconnectGuide = """
-                Your strap keeps connecting and then dropping a second later. This is almost always a stale Bluetooth pairing — usually after a WHOOP firmware update, or the official WHOOP app holding the strap. NOOP works fine once it's re-paired:
+                Your strap keeps connecting and then dropping a second later. This is almost always a stale Bluetooth pairing - usually after a WHOOP firmware update, or the official WHOOP app holding the strap. NOOP works fine once it's re-paired:
 
                 1. Quit the official WHOOP app (or turn off Bluetooth on that phone).
                 2. Open System Settings → Bluetooth and Forget your WHOOP if it's listed.
@@ -2819,7 +2819,7 @@ extension BLEManager: @preconcurrency CBCentralManagerDelegate {
         }
         if let cbErr = error as? CBError, cbErr.code == .peerRemovedPairingInformation {
             state.reconnectGuide = """
-            Your strap's Bluetooth pairing was reset — usually by a WHOOP firmware update, or the official WHOOP app reconnecting. NOOP works fine on the new firmware; you just need to re-pair:
+            Your strap's Bluetooth pairing was reset - usually by a WHOOP firmware update, or the official WHOOP app reconnecting. NOOP works fine on the new firmware; you just need to re-pair:
 
             1. Quit the official WHOOP app (or turn off Bluetooth on that phone).
             2. Open System Settings → Bluetooth and Forget “WHOOP MG” if it's listed.
@@ -3030,7 +3030,7 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
                     // counting silently; recordRefusal() below stays false (latched), so no epitaph spam.
                     log("WHOOP 5/MG: bond still refused during a paused-state probe (streak \(bondRefusalStreak)) - the give-up stays latched")
                 } else if bondRefusalStreak >= 2 {
-                    state.pairingHint = "NOOP can see your strap but it's refusing to pair — it's likely still bonded to the official WHOOP app, or your phone is holding an old pairing. To fix it: (1) fully close the WHOOP app, (2) on a 5.0/MG, tap the band repeatedly until the LEDs flash blue (pairing mode), (3) if your strap is listed under iPhone Settings → Bluetooth, tap it and choose Forget This Device, then reconnect in NOOP."
+                    state.pairingHint = "NOOP can see your strap but it's refusing to pair - it's likely still bonded to the official WHOOP app, or your phone is holding an old pairing. To fix it: (1) fully close the WHOOP app, (2) on a 5.0/MG, tap the band repeatedly until the LEDs flash blue (pairing mode), (3) if your strap is listed under iPhone Settings → Bluetooth, tap it and choose Forget This Device, then reconnect in NOOP."
                     log("WHOOP 5/MG: bond refused \(bondRefusalStreak)× with no successful bond — the strap is refusing the encrypted link (WHOOP app holds it, or a stale iOS pairing). Surfacing pairing-mode + forget-device guidance (#78).")
                 } else {
                     log("WHOOP 5/MG: bond write refused (insufficient) — retrying once; will surface pairing-mode guidance if it persists (#78).")
@@ -3208,7 +3208,7 @@ extension BLEManager: @preconcurrency CBPeripheralDelegate {
                 // if 0x2A37 emits the user gets live HR on a radio that otherwise died; if it doesn't, at
                 // least the arm→die loop stops.
                 log("Realtime HR: standard-HR mode (low bandwidth) — skipping R10/R11 arm (#80)")
-                state.standardHRMode = "Standard HR mode (low bandwidth) — your Bluetooth radio couldn't sustain the full stream; live heart rate via the standard profile."
+                state.standardHRMode = "Standard HR mode (low bandwidth) - your Bluetooth radio couldn't sustain the full stream; live heart rate via the standard profile."
             } else {
                 log("Realtime HR: arming after bond")
                 realtimeArmed = true   // keep reconcileRealtime()'s edge tracking in sync with the arm

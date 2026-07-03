@@ -98,12 +98,12 @@ struct AutoWorkoutCard: View {
         let end = Self.timeFmt.string(from: Date(timeIntervalSince1970: TimeInterval(w.endSec)))
         let cal = Calendar.current
         if cal.isDateInToday(startDate) {
-            return String(localized: "Looks like a workout around \(start)–\(end) (avg HR \(w.avgBpm), \(w.durationMin) min). Save it?")
+            return String(localized: "Looks like a workout around \(start)-\(end) (avg HR \(w.avgBpm), \(w.durationMin) min). Save it?")
         }
         if cal.isDateInYesterday(startDate) {
-            return String(localized: "Looks like a workout yesterday around \(start)–\(end) (avg HR \(w.avgBpm), \(w.durationMin) min). Save it?")
+            return String(localized: "Looks like a workout yesterday around \(start)-\(end) (avg HR \(w.avgBpm), \(w.durationMin) min). Save it?")
         }
-        return String(localized: "Looks like a workout on \(Self.dateFmt.string(from: startDate)) around \(start)–\(end) (avg HR \(w.avgBpm), \(w.durationMin) min). Save it?")
+        return String(localized: "Looks like a workout on \(Self.dateFmt.string(from: startDate)) around \(start)-\(end) (avg HR \(w.avgBpm), \(w.durationMin) min). Save it?")
     }
 
     private func reload() async {

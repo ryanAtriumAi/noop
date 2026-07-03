@@ -248,7 +248,7 @@ public final class FrameRouter {
         case 0:  return "The strap rejected the rename (failure)."
         case 2:  return "Rename pending…"
         case 3:  return "This strap firmware doesn't support renaming."
-        default: return "Rename sent — re-scan to confirm the new name."
+        default: return "Rename sent - re-scan to confirm the new name."
         }
     }
 

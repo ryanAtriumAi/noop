@@ -466,7 +466,7 @@ struct WorkoutDetailView: View {
         Self.timeFmt.string(from: Date(timeIntervalSince1970: TimeInterval(ts)))
     }
     private func timeRangeLabel(_ start: Int, _ end: Int) -> String {
-        end > start ? "\(timeLabel(start))–\(timeLabel(end))" : timeLabel(start)
+        end > start ? "\(timeLabel(start))-\(timeLabel(end))" : timeLabel(start)
     }
     private func durationLabel(_ s: Double?) -> String {
         guard let s, s > 0 else { return "–" }

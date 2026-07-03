@@ -233,7 +233,7 @@ struct StressView: View {
                     // bar split by how many waking hours sat in each band, with durations.
                     StressTotalsBar(totals: StressTotals(hours: day.hours))
 
-                    Text("The line is each waking hour's 0–3 proxy, scored against your own calm hours today. The bar below splits your day into calm, moderate and high stress time.")
+                    Text("The line is each waking hour's 0-3 proxy, scored against your own calm hours today. The bar below splits your day into calm, moderate and high stress time.")
                         .font(StrandFont.footnote)
                         .foregroundStyle(StrandPalette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -478,7 +478,7 @@ struct StressView: View {
                 let yTop = max(1, peak + 0.3)
                 ChartCard(
                     title: "Stress · \(range.label)",
-                    subtitle: String(localized: "Daily 0–3 proxy"),
+                    subtitle: String(localized: "Daily 0-3 proxy"),
                     trailing: String(localized: "avg \(String(format: "%.1f", avg))"),
                     tint: StressRamp.calm
                 ) {
@@ -533,19 +533,19 @@ struct StressView: View {
             VStack(alignment: .leading, spacing: NoopMetrics.cardInnerSpacing) {
                 Text("How this is computed").strandOverline()
                 Text(model.usingStored
-                     ? "Today's value is your recorded daily stress score (0–3)."
+                     ? "Today's value is your recorded daily stress score (0-3)."
                      : "Stress is derived from two autonomic signals.")
                     .font(StrandFont.body)
                     .foregroundStyle(StrandPalette.textPrimary)
-                Text("We compare today's resting heart rate and HRV to your own 30-day baseline. A higher-than-usual resting HR and a lower-than-usual HRV both push the score up, classic signs the body is activated. The combined shift is mapped onto a 0–3 scale: 0 is calm, 1.5 sits at your baseline, 3 is highly activated.")
+                Text("We compare today's resting heart rate and HRV to your own 30-day baseline. A higher-than-usual resting HR and a lower-than-usual HRV both push the score up, classic signs the body is activated. The combined shift is mapped onto a 0-3 scale: 0 is calm, 1.5 sits at your baseline, 3 is highly activated.")
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Divider().overlay(StrandPalette.hairline)
                 HStack(spacing: 0) {
-                    bandLegend("0–1", String(localized: "LOW"), StressRamp.calm)
-                    bandLegend("1–2", String(localized: "MEDIUM"), StressRamp.steady)
-                    bandLegend("2–3", String(localized: "HIGH"), StressRamp.tense)
+                    bandLegend("0-1", String(localized: "LOW"), StressRamp.calm)
+                    bandLegend("1-2", String(localized: "MEDIUM"), StressRamp.steady)
+                    bandLegend("2-3", String(localized: "HIGH"), StressRamp.tense)
                 }
             }
         }
@@ -1162,7 +1162,7 @@ private struct StressPreviewHarness: View {
                              accent: StressRamp.calm)
                 }
 
-                ChartCard(title: "Stress · M", subtitle: "Daily 0–3 proxy", trailing: "avg 1.5") {
+                ChartCard(title: "Stress · M", subtitle: "Daily 0-3 proxy", trailing: "avg 1.5") {
                     TrendChart(points: sampleStressTrend(30), gradient: StressRamp.gradient,
                                valueRange: 0...3, showsArea: true, height: NoopMetrics.chartHeight,
                                valueFormat: { String(format: "%.1f", $0) })

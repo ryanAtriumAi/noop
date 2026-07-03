@@ -296,7 +296,7 @@ struct CompareView: View {
 
     private var metricSection: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.gap) {
-            SectionHeader("Metrics", overline: "Overlay 2–4 signals")
+            SectionHeader("Metrics", overline: "Overlay 2-4 signals")
             NoopCard {
                 VStack(alignment: .leading, spacing: NoopMetrics.gap) {
                     // Responsive: range pills + the Add menu side-by-side when there's room, else
@@ -399,8 +399,8 @@ struct CompareView: View {
             ChartCard(
                 title: "Normalized overlay",
                 subtitle: anyWidened
-                    ? String(localized: "Min–max normalized · sparse series widened past \(range.phrase) · \(inspectHint)")
-                    : String(localized: "Each line min–max normalized within \(range.phrase) · \(inspectHint)"),
+                    ? String(localized: "Min-max normalized · sparse series widened past \(range.phrase) · \(inspectHint)")
+                    : String(localized: "Each line min-max normalized within \(range.phrase) · \(inspectHint)"),
                 trailing: String(localized: "\(nonEmpty.count) series"),
                 // Anchor the overlay card to the brand-green chrome world; each line keeps its own
                 // categorical series colour so the lines stay distinguishable against the wash.
@@ -435,7 +435,7 @@ struct CompareView: View {
                         .foregroundStyle(StrandPalette.textPrimary)
                     Spacer()
                     // Real min/max labels honour the Effort scale (#268); other metrics are unchanged.
-                    Text("\(s.metric.format(s.realMin, effortScale: effortScale)) – \(s.metric.format(s.realMax, effortScale: effortScale))")
+                    Text("\(s.metric.format(s.realMin, effortScale: effortScale))-\(s.metric.format(s.realMax, effortScale: effortScale))")
                         .font(StrandFont.captionNumber)
                         .foregroundStyle(StrandPalette.textSecondary)
                 }

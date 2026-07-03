@@ -183,7 +183,7 @@ struct LiveWorkoutView: View {
                 }
             }
             if let band = zoneSet.zones.first(where: { $0.number == zone }) {
-                Text("Zone \(zone): \(Int(band.lower))–\(Int(band.upper)) bpm (\(Int(band.lowerPct * 100))–\(Int(band.upperPct * 100))% max HR)")
+                Text("Zone \(zone): \(Int(band.lower))-\(Int(band.upper)) bpm (\(Int(band.lowerPct * 100))-\(Int(band.upperPct * 100))% max HR)")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
             } else {
                 Text("Warming up. Keep moving to climb into Zone 1.")

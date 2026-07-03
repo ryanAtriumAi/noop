@@ -322,7 +322,7 @@ struct WeeklyDigestContent: View {
     // MARK: - Formatting
 
     private var weekRangeLabel: String {
-        "\(shortDate(digest.weekStart)) – \(shortDate(digest.weekEnd))"
+        "\(shortDate(digest.weekStart))-\(shortDate(digest.weekEnd))"
     }
 
     /// "Jun 8" from "2026-06-08", via the engine's own pure parse (no Calendar).

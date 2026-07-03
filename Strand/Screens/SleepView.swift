@@ -614,7 +614,7 @@ struct SleepView: View {
     private func napWindowText(_ nap: CachedSleepSession) -> String {
         let start = Night.clockString(nap.effectiveStartTs)
         let end = Night.clockString(nap.endTs)
-        return "\(start)–\(end)"
+        return "\(start)-\(end)"
     }
 
     /// The stage-breakdown ChartCard for a decoded night: hypnogram when intervals
@@ -1855,7 +1855,7 @@ struct SleepView: View {
 
     /// "+12% vs typical" / "−0.4 rpm vs typical" — the latest-vs-mean caption every tile carries.
     private func vsTypical(_ latest: Double?, _ typical: Double?, suffix: String, decimals: Int = 0) -> String {
-        guard let latest, let typical, typical != 0 else { return String(localized: "vs typical —") }
+        guard let latest, let typical, typical != 0 else { return String(localized: "vs typical - ") }
         let diff = latest - typical
         let sign = diff >= 0 ? "+" : "−"
         let mag = abs(diff)

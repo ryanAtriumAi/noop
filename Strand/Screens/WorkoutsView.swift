@@ -1521,7 +1521,7 @@ struct WorkoutsView: View {
 
     /// "HH:mm–HH:mm" when the row carries a real end, start-only otherwise (#157).
     private func timeRangeLabel(_ start: Int, _ end: Int) -> String {
-        end > start ? "\(timeLabel(start))–\(timeLabel(end))" : timeLabel(start)
+        end > start ? "\(timeLabel(start))-\(timeLabel(end))" : timeLabel(start)
     }
 
     private func durationLabel(_ s: Double?) -> String {

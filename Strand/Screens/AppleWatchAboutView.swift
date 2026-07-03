@@ -218,7 +218,7 @@ struct AppleWatchAboutView: View {
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("That's why a watch-only Charge starts out \u{201C}Calibrating\u{201D}. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Charge appears with its confidence, on the same 0–100 scale as a strap's.")
+                Text("That's why a watch-only Charge starts out \u{201C}Calibrating\u{201D}. NOOP needs about seven nights of your HRV to learn what normal looks like for you. Until it has them it withholds the score rather than guess. Once the baseline is set, your Charge appears with its confidence, on the same 0-100 scale as a strap's.")
                     .font(StrandFont.subhead)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

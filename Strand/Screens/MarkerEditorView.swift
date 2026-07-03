@@ -246,7 +246,7 @@ struct MarkerEditorView: View {
                             .accessibilityLabel("Optional note")
                     }
                     field(String(localized: "Reference range from my report (optional)")) {
-                        TextField("e.g. 2.0–5.0 (your report's own range)", text: $referenceText)
+                        TextField("e.g. 2.0-5.0 (your report's own range)", text: $referenceText)
                             .textFieldStyle(.plain)
                             .font(StrandFont.body)
                             .foregroundStyle(StrandPalette.textPrimary)

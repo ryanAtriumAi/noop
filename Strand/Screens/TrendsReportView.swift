@@ -241,8 +241,8 @@ struct TrendsReportPage: View {
     private var rangeLabel: String {
         let span = report.totalDays
         return span == 1
-            ? String(localized: "\(prettyDate(report.start)) – \(prettyDate(report.end))  ·  1 day")
-            : String(localized: "\(prettyDate(report.start)) – \(prettyDate(report.end))  ·  \(span) days")
+            ? String(localized: "\(prettyDate(report.start))-\(prettyDate(report.end))  ·  1 day")
+            : String(localized: "\(prettyDate(report.start))-\(prettyDate(report.end))  ·  \(span) days")
     }
 
     // MARK: Headlines
@@ -362,7 +362,7 @@ struct TrendsReportPage: View {
             // Provenance legend (#457): a clinician (or anyone) reading this needs to know which numbers
             // are directly measured vs. NOOP's own derived scores. HRV / Resting HR come off the strap;
             // Recovery and Strain are computed on-device and are NOT clinical measures.
-            Text("How to read this: HRV, Resting HR, Sleep duration, Respiratory rate and Skin temperature are measured from the strap (skin temp is shown as the deviation from your own baseline). Workouts is the count of activities you logged or that were detected. Recovery, Strain and Stress are NOOP's own on-device scores, not clinical measures: Recovery is a daily readiness composite (HRV, resting HR, sleep and skin-temp trend), Strain is cardiovascular load derived from heart rate, and Stress is a 0–3 autonomic-load index from resting HR and HRV.")
+            Text("How to read this: HRV, Resting HR, Sleep duration, Respiratory rate and Skin temperature are measured from the strap (skin temp is shown as the deviation from your own baseline). Workouts is the count of activities you logged or that were detected. Recovery, Strain and Stress are NOOP's own on-device scores, not clinical measures: Recovery is a daily readiness composite (HRV, resting HR, sleep and skin-temp trend), Strain is cardiovascular load derived from heart rate, and Stress is a 0-3 autonomic-load index from resting HR and HRV.")
                 .font(StrandFont.footnote)
                 .foregroundStyle(StrandPalette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

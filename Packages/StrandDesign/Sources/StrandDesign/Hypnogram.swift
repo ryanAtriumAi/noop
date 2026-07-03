@@ -205,7 +205,7 @@ public struct Hypnogram: View {
                                 container: geo.size,
                                 tooltip: ChartTooltip(
                                     value: interval.stage.label,
-                                    label: "\(timeLabel(interval.start))–\(timeLabel(interval.end)) · \(Int((interval.duration / 60).rounded()))m",
+                                    label: "\(timeLabel(interval.start))-\(timeLabel(interval.end)) · \(Int((interval.duration / 60).rounded()))m",
                                     accent: color
                                 )
                             )

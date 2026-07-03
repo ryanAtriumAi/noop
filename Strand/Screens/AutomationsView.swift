@@ -194,7 +194,7 @@ struct AutomationsView: View {
                               isOn: $behavior.stressAutoNudge)
                     rowDivider
                     ToggleRow(label: String(localized: "Respect quiet hours"),
-                              help: String(localized: "Suppress auto-nudges overnight (10pm–7am)."),
+                              help: String(localized: "Suppress auto-nudges overnight (10pm-7am)."),
                               isOn: $behavior.stressQuietHours)
                     rowDivider
                     ToggleRow(label: String(localized: "Use my resonance pace"),

@@ -1695,7 +1695,7 @@ final class AppModel: ObservableObject {
                 let span: String
                 if let a = summary.earliest, let b = summary.latest {
                     let f = DateFormatter(); f.dateFormat = "MMM yyyy"
-                    span = " · \(f.string(from: a))–\(f.string(from: b))"
+                    span = " · \(f.string(from: a))-\(f.string(from: b))"
                 } else { span = "" }
                 finishImport(.whoop, summary: "Imported \(summary.recordCount) records\(span)")
             } catch {
@@ -1726,7 +1726,7 @@ final class AppModel: ObservableObject {
                 let span: String
                 if let a = summary.earliest, let b = summary.latest {
                     let f = DateFormatter(); f.dateFormat = "MMM yyyy"
-                    span = " · \(f.string(from: a))–\(f.string(from: b))"
+                    span = " · \(f.string(from: a))-\(f.string(from: b))"
                 } else { span = "" }
                 let days = summary.countsByCategory["days"] ?? 0
                 let sleeps = summary.countsByCategory["sleepSessions"] ?? 0

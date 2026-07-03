@@ -348,7 +348,7 @@ struct IntervalTimerView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(StrandFont.headline).foregroundStyle(StrandPalette.textPrimary)
-                Text("\(range.lowerBound)–\(range.upperBound)\(unit.map { " \($0)" } ?? "") · step \(step)")
+                Text("\(range.lowerBound)-\(range.upperBound)\(unit.map { " \($0)" } ?? "") · step \(step)")
                     .font(StrandFont.footnote).foregroundStyle(StrandPalette.textTertiary)
             }
             Spacer()

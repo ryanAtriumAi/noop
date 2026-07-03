@@ -202,7 +202,7 @@ struct CycleAwarenessCard: View {
     /// "~day 18–22" — always a RANGE, never a single point.
     private var cycleDayText: String? {
         guard let lo = result.cycleDayLow, let hi = result.cycleDayHigh else { return nil }
-        return lo == hi ? String(localized: "· ~day \(lo)") : String(localized: "· ~day \(lo)–\(hi)")
+        return lo == hi ? String(localized: "· ~day \(lo)") : String(localized: "· ~day \(lo)-\(hi)")
     }
 
     private var statusLine: String { result.note }
@@ -350,7 +350,7 @@ struct BodyClockCard: View {
             Text("Plan · \(plan.estimatedDays)-day shift")
                 .strandOverline()
             // Day 1's concrete light + lights-out cue — light + sleep timing only.
-            Text("Day 1: bright light \(clockString(firstDay.brightLightStartHour))–\(clockString(firstDay.brightLightEndHour)), lights-out around \(clockString(firstDay.targetSleepHour)).")
+            Text("Day 1: bright light \(clockString(firstDay.brightLightStartHour))-\(clockString(firstDay.brightLightEndHour)), lights-out around \(clockString(firstDay.targetSleepHour)).")
                 .font(StrandFont.subhead)
                 .foregroundStyle(StrandPalette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
