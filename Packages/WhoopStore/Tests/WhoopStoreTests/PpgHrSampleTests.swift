@@ -52,6 +52,28 @@ final class PpgHrSampleTests: XCTestCase {
         XCTAssertEqual(buckets[0].bpm, 80.0, accuracy: 0.001)
     }
 
+    /// hrBuckets carries the WEAKEST contributing confidence: measured rows count as 1.0, PPG
+    /// fallback rows their stored conf, and a mixed bucket reports the MIN — so a weak-optical
+    /// stretch (tattoo mode, conf < 0.3) is distinguishable from clean measured beats on the chart
+    /// read path. The bpm aggregate is untouched.
+    func testHrBucketsCarryMinimumConfidence() async throws {
+        let store = try await WhoopStore.inMemory()
+        let dev = "my-whoop"
+        let base = 1_780_000_000
+        try await store.insert(Streams(hr: [HRSample(ts: base, bpm: 90)]), deviceId: dev)
+        try await store.insert(Streams(ppgHr: [
+            PpgHrSample(ts: base + 1, bpm: 70, conf: 0.22),    // weak-mode recovered row, same bucket as measured
+            PpgHrSample(ts: base + 120, bpm: 72, conf: 0.9),   // clean PPG row, its own bucket
+        ]), deviceId: dev)
+        try await store.insert(Streams(hr: [HRSample(ts: base + 185, bpm: 88)]), deviceId: dev)
+
+        let buckets = try await store.hrBuckets(deviceId: dev, from: base, to: base + 200, bucketSeconds: 60)
+        XCTAssertEqual(buckets.count, 3)
+        XCTAssertEqual(buckets[0].conf, 0.22, accuracy: 0.001)   // mixed: MIN(1.0 measured, 0.22 ppg)
+        XCTAssertEqual(buckets[1].conf, 0.9, accuracy: 0.001)    // ppg-only: its stored conf
+        XCTAssertEqual(buckets[2].conf, 1.0, accuracy: 0.001)    // measured-only: full confidence
+    }
+
     /// hrSamples COALESCEs the same way: a measured second wins, a PPG-only second fills the gap,
     /// and the REAL PPG bpm is ROUND-ed into the `HRSample.bpm` Int domain (70.6 -> 71).
     func testHrSamplesCoalescesPpgWhereNoMeasuredHr() async throws {

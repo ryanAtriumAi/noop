@@ -155,7 +155,11 @@ final class Backfiller {
          connectionLog: ((String) -> Void)? = nil,
          firmwareLayout: ((Int) -> Void)? = nil,
          extract: @escaping Extractor = { extractHistoricalStreams($0, deviceClockRef: $1, wallClockRef: $2,
-                                                                    sessionOldestUnix: $3, sessionNewestUnix: $4) }) {
+                                                                    sessionOldestUnix: $3, sessionNewestUnix: $4,
+                                                                    // Weak-signal (tattoo) mode: opt-in lower v26 PPG
+                                                                    // acceptance floor; samples keep their TRUE conf so
+                                                                    // weak estimates stay visibly weak downstream.
+                                                                    ppgMinConfidence: PpgPrefs.effectiveMinConfidence()) }) {
         self.store = store
         self.deviceId = deviceId
         self.ackTrim = ackTrim

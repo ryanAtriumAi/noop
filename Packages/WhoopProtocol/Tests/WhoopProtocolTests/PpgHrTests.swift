@@ -61,6 +61,29 @@ final class PpgHrTests: XCTestCase {
         XCTAssertTrue(series.isEmpty, "white noise must not fabricate an HR (got \(series.count))")
     }
 
+    /// Weak-signal (tattoo) mode threading: the SAME input the default 0.3 gate rejects is accepted
+    /// when the caller opts into a lower floor — and every recovered sample carries its TRUE (low)
+    /// conf, so weak estimates stay distinguishable downstream. The default path stays byte-identical.
+    func testDeriveMinConfThreadsThroughAndKeepsTrueConf() {
+        // Deterministic LCG noise (same generator as the white-noise test) — a weak/garbage signal
+        // relative to the default gate.
+        var state: UInt64 = 0x9E3779B97F4A7C15
+        func next() -> Int {
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            return Int(Int32(truncatingIfNeeded: state >> 33)) % 1000
+        }
+        let records: [(ts: Int, samples: [Int])] = (0..<30).map { s in
+            (ts: 1_780_000_000 + s, samples: (0..<fs).map { _ in next() })
+        }
+        let strict = PpgHr.derivePpgHr(records: records)                  // default gate
+        let loose = PpgHr.derivePpgHr(records: records, minConf: 0.01)    // opt-in low floor
+        XCTAssertTrue(strict.isEmpty, "the default gate must keep rejecting weak windows")
+        XCTAssertFalse(loose.isEmpty, "a lower floor must accept the weak windows")
+        for s in loose {
+            XCTAssertLessThan(s.conf, 0.3, "recovered samples must report their true sub-gate conf")
+        }
+    }
+
     func testEstimateRejectsTooShortWindow() {
         // < 3 s of samples → nil (can't resolve a low HR).
         XCTAssertNil(PpgHr.estimate(sineSecond(bpm: 70, startSample: 0)))   // 1 s only

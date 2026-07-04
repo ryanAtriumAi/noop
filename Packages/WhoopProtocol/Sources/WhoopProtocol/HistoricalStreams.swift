@@ -96,7 +96,12 @@ public func extractHistoricalStreams(_ parsed: [ParsedFrame],
                                      // oldest/newest markers for THIS sync. nil on the replay/import/no-range
                                      // paths — the gate then falls back to the absolute-only floor (unchanged).
                                      sessionOldestUnix: Int? = nil,
-                                     sessionNewestUnix: Int? = nil) -> Streams {
+                                     sessionNewestUnix: Int? = nil,
+                                     // Acceptance floor for the v26 PPG-HR autocorrelation peak. Default =
+                                     // the canonical PpgHr.minConfidence (byte-identical behaviour); the
+                                     // app's opt-in weak-signal (tattoo) mode passes a lower floor. Samples
+                                     // always carry their TRUE conf, so weak estimates stay visibly weak.
+                                     ppgMinConfidence: Double = PpgHr.minConfidence) -> Streams {
     func wall(_ deviceTs: Int?) -> Int? {
         guard let d = deviceTs else { return nil }
         return wallClockRef + (d - deviceClockRef)
@@ -247,7 +252,7 @@ public func extractHistoricalStreams(_ parsed: [ParsedFrame],
     }
     // Derive per-second HR from the collected v26 PPG bursts (issue #156). Empty when there were no v26
     // records (the WHOOP 4 / v18-only common case), so this is a no-op cost there.
-    out.ppgHr = PpgHr.derivePpgHr(records: ppgRecords)
+    out.ppgHr = PpgHr.derivePpgHr(records: ppgRecords, minConf: ppgMinConfidence)
     out.droppedImplausible = droppedImplausible   // #547 diag count (not persisted, not encoded)
     return out
 }

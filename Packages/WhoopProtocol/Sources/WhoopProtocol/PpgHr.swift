@@ -145,9 +145,16 @@ public enum PpgHr {
     /// Records are grouped into consecutive-second runs (PPG phase is only continuous within a run); a
     /// window centred on each second is autocorrelated. Returns one `PpgHrSample` per second that
     /// yielded a confident estimate, ascending by ts. Records may be unsorted / contain gaps.
+    ///
+    /// `minConf` is the acceptance floor for a window's normalised autocorrelation peak. The default
+    /// is the canonical `minConfidence` (0.3) — byte-identical to the historical behaviour. The
+    /// opt-in weak-signal mode (tattooed / low-perfusion skin, where a real pulse returns far less
+    /// light) passes a lower floor; every accepted sample still carries its TRUE `conf`, so a weak
+    /// estimate stays visibly weak downstream instead of passing as clean.
     public static func derivePpgHr(records: [(ts: Int, samples: [Int])],
                                    fs: Int = sampleRateHz,
-                                   windowSeconds: Int = windowSeconds) -> [PpgHrSample] {
+                                   windowSeconds: Int = windowSeconds,
+                                   minConf: Double = minConfidence) -> [PpgHrSample] {
         guard !records.isEmpty else { return [] }
         // One waveform per second (last write wins on a duplicate ts).
         var secs = [Int: [Int]]()
@@ -173,7 +180,7 @@ public enum PpgHr {
                 guard win.count >= 3 else { continue }
                 var sig = [Int]()
                 for u in win { sig.append(contentsOf: secs[u]!) }
-                if let est = estimate(sig, fs: fs) {
+                if let est = estimate(sig, fs: fs, minConf: minConf) {
                     out.append(PpgHrSample(ts: t, bpm: Int(est.bpm), conf: est.conf))
                 }
             }

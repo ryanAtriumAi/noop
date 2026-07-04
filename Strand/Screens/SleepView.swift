@@ -1302,17 +1302,37 @@ struct SleepView: View {
                     grid += step
                 }
                 // Base trace across the whole night; the line BREAKS across >5-min data gaps.
+                // Split by signal confidence: clean/measured HR draws solid, weak-optical stretches
+                // (PPG conf < 0.3 — tattoo/low-perfusion territory, present only when the
+                // weak-signal mode recovered them) draw lighter + dashed, so a weak estimate is
+                // never presented as a clean measured beat.
                 let baseColor = selectedStage == nil
                     ? StrandPalette.restColor.opacity(0.9)
                     : StrandPalette.textTertiary.opacity(0.45)
-                var path = Path()
-                var lastTs: Int? = nil
+                var strong = Path()
+                var weakPath = Path()
+                var prev: (ts: Int, pt: CGPoint, strong: Bool)? = nil
                 for b in buckets {
                     let p = point(b)
-                    if let last = lastTs, b.ts - last <= 300 { path.addLine(to: p) } else { path.move(to: p) }
-                    lastTs = b.ts
+                    let isStrong = b.conf >= 0.3
+                    if let pr = prev, b.ts - pr.ts <= 300 {
+                        // Bridge class transitions from the previous point so the trace stays
+                        // continuous — the weak segment owns the bridging stroke.
+                        if isStrong {
+                            if pr.strong { strong.addLine(to: p) }
+                            else { strong.move(to: pr.pt); strong.addLine(to: p) }
+                        } else {
+                            if !pr.strong { weakPath.addLine(to: p) }
+                            else { weakPath.move(to: pr.pt); weakPath.addLine(to: p) }
+                        }
+                    } else {
+                        if isStrong { strong.move(to: p) } else { weakPath.move(to: p) }
+                    }
+                    prev = (b.ts, p, isStrong)
                 }
-                ctx.stroke(path, with: .color(baseColor), style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
+                ctx.stroke(strong, with: .color(baseColor), style: StrokeStyle(lineWidth: 1.2, lineJoin: .round))
+                ctx.stroke(weakPath, with: .color(baseColor.opacity(0.55)),
+                           style: StrokeStyle(lineWidth: 1, lineJoin: .round, dash: [2, 3]))
                 // Selected-stage trace overlay: the HR line re-drawn in the stage colour, only
                 // inside that stage's intervals.
                 if let sel = selectedStage {
