@@ -1130,7 +1130,7 @@ struct SleepView: View {
                     : (minutes < t.lo ? String(localized: "below your usual")
                                       : String(localized: "about your usual"))
                 (Text(sel.label).fontWeight(.semibold).foregroundColor(StrandPalette.sleepStageColor(sel))
-                    + Text(" \(durationText(minutes)) · typically \(durationText(t.lo))–\(durationText(t.hi)) — \(phrase)."))
+                    + Text(" \(durationText(minutes)) · typically \(durationText(t.lo)) to \(durationText(t.hi)), \(phrase)."))
                     .font(StrandFont.footnote)
                     .foregroundStyle(StrandPalette.textSecondary)
                     .lineLimit(2)

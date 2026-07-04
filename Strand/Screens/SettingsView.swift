@@ -1058,7 +1058,7 @@ struct SettingsView: View {
                 }
                 .toggleStyle(.switch)
                 .tint(StrandPalette.accent)
-                Text("WHOOP 5 optical (PPG) heart rate only. Recovered readings are marked low-confidence and drawn as a lighter trace — never presented as clean measured beats. If your wrist is heavily tattooed, wearing the strap higher on the forearm or on the bicep still gives the best signal. Applies to newly synced data.")
+                Text("WHOOP 5 optical (PPG) heart rate only. Recovered readings are marked low-confidence and drawn as a lighter trace, never presented as clean measured beats. If your wrist is heavily tattooed, wearing the strap higher on the forearm or on the bicep still gives the best signal. Applies to newly synced data.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
