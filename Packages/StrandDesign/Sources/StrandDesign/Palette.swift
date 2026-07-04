@@ -188,10 +188,15 @@ public enum StrandPalette {
     public static var strainGradient: Gradient { Gradient(stops: strainStops) }
 
     // MARK: Sleep stages — the blue "Rest" colour world (Titanium); Classic adds a purple REM.
-    public static var sleepAwake: Color { isClassic ? cSleepAwake : Color(light: "#97A2B2", dark: "#C2CCDA") }
-    public static var sleepLight: Color { isClassic ? cSleepLight : Color(light: "#3A80D6", dark: "#4A90E2") }
-    public static var sleepDeep:  Color { isClassic ? cSleepDeep  : Color(light: "#234F9E", dark: "#2F6FCB") }
-    public static var sleepREM:   Color { isClassic ? cSleepREM   : Color(light: "#5790DA", dark: "#6FA8E8") }
+    // WHOOP sleep-stage palette, sampled from the official app's sleep-details screens
+    // (thelocker "app-update-sleep-details-page" assets): Awake white-grey #CAC8CB, Light
+    // periwinkle #A7A4F4, SWS/Deep orchid-pink #FD96FD, REM purple #AE5BEF. Distinct hues per
+    // stage — the previous three near-identical blues made the chart unreadable. Light-mode
+    // variants are the same hues darkened for contrast on white.
+    public static var sleepAwake: Color { isClassic ? cSleepAwake : Color(light: "#8E949E", dark: "#CAC8CB") }
+    public static var sleepLight: Color { isClassic ? cSleepLight : Color(light: "#7B78E0", dark: "#A7A4F4") }
+    public static var sleepDeep:  Color { isClassic ? cSleepDeep  : Color(light: "#C13EC1", dark: "#FD96FD") }
+    public static var sleepREM:   Color { isClassic ? cSleepREM   : Color(light: "#8E3BD6", dark: "#AE5BEF") }
 
     // MARK: HR zones — Titanium cool→warm (no green), or the Classic grey→green→yellow→orange→red.
     public static var zone1: Color { isClassic ? cZone1 : Color(light: "#3A80D6", dark: "#4A90E2") }
