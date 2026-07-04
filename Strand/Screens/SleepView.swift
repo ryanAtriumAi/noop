@@ -649,8 +649,7 @@ struct SleepView: View {
                 ChartCard(
                     title: "Stage breakdown",
                     subtitle: subtitle,
-                    trailing: durationText(s.asleep),
-                    height: 428,
+                    height: 524,
                     tint: StrandPalette.restColor,
                     chart: { stageTimeline(s, intervals: intervals, night: night) }
                 )
@@ -1046,10 +1045,13 @@ struct SleepView: View {
         let origin = smoothed.first?.start ?? 0
         let span = max(1, (smoothed.map(\.end).max() ?? 1) - origin)
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
+            // WHOOP's hero pair: HOURS OF SLEEP + RESTORATIVE SLEEP (deep + REM), each against
+            // its 30-day typical.
+            sleepHeadline(s)
             // WHOOP's sleeping heart-rate chart above the rows: thin HR trace across the night.
             // Selecting a stage tints the trace + washes the chart columns during that stage.
             sleepHRChart(intervals: smoothed, origin: origin, span: span, night: night)
-                .frame(height: 128)
+                .frame(height: 124)
                 .padding(.horizontal, 10)
                 .padding(.bottom, 2)
             stageTimelineRow(.awake, minutes: s.awake, total: s.total, intervals: smoothed, origin: origin, span: span)
@@ -1068,7 +1070,131 @@ struct SleepView: View {
             .foregroundStyle(StrandPalette.textTertiary)
             .padding(.horizontal, 10)
             .accessibilityHidden(true)
+            // WHOOP's per-stage insight: with a stage selected, tonight vs the 30-day typical
+            // range; otherwise a quiet hint that the rows are tappable. Fixed-height slot so
+            // selecting a stage never reflows the card.
+            stageInsight(s)
+                .frame(height: 30, alignment: .topLeading)
+                .padding(.horizontal, 2)
         }
+    }
+
+    /// WHOOP's hero pair for the night: HOURS OF SLEEP and RESTORATIVE SLEEP (deep + REM), each
+    /// with its trailing-30-day typical underneath — the "how does tonight compare" read without
+    /// leaving the card.
+    @ViewBuilder
+    private func sleepHeadline(_ s: Stages) -> some View {
+        let restorative = s.deep + s.rem
+        HStack(alignment: .top, spacing: NoopMetrics.space6) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(durationText(s.asleep))
+                    .font(StrandFont.number(26))
+                    .foregroundStyle(StrandPalette.textPrimary)
+                Text("HOURS OF SLEEP")
+                    .font(StrandFont.overline)
+                    .tracking(StrandFont.overlineTracking)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                if let t = stageTypical(nil) {
+                    Text("typically \(durationText(t.mean))")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(durationText(restorative))
+                    .font(StrandFont.number(26))
+                    .foregroundStyle(StrandPalette.sleepREM)
+                Text("RESTORATIVE SLEEP")
+                    .font(StrandFont.overline)
+                    .tracking(StrandFont.overlineTracking)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                if let t = restorativeTypical() {
+                    Text("typically \(durationText(t))")
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                }
+            }
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The tonight-vs-typical line under the stage rows. Selected: "REM 2h 45m · typically
+    /// 1h 50m–2h 20m — above your usual." Unselected: the tap affordance hint.
+    @ViewBuilder
+    private func stageInsight(_ s: Stages) -> some View {
+        if let sel = selectedStage {
+            let minutes = stageMinutes(sel, in: s)
+            if let t = stageTypical(sel) {
+                let phrase = minutes > t.hi ? String(localized: "above your usual")
+                    : (minutes < t.lo ? String(localized: "below your usual")
+                                      : String(localized: "about your usual"))
+                (Text(sel.label).fontWeight(.semibold).foregroundColor(StrandPalette.sleepStageColor(sel))
+                    + Text(" \(durationText(minutes)) · typically \(durationText(t.lo))–\(durationText(t.hi)) — \(phrase)."))
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .lineLimit(2)
+            } else {
+                Text("\(sel.label): \(durationText(minutes)). Not enough history yet for a typical range.")
+                    .font(StrandFont.footnote)
+                    .foregroundStyle(StrandPalette.textSecondary)
+                    .lineLimit(2)
+            }
+        } else {
+            Text("Tap a stage to compare with your 30-day typical.")
+                .font(StrandFont.footnote)
+                .foregroundStyle(StrandPalette.textTertiary)
+        }
+    }
+
+    /// Tonight's minutes for one stage out of the decoded totals.
+    private func stageMinutes(_ stage: SleepStage, in s: Stages) -> Double {
+        switch stage {
+        case .awake: return s.awake
+        case .light: return s.light
+        case .deep:  return s.deep
+        case .rem:   return s.rem
+        }
+    }
+
+    /// Per-stage typical minutes over the trailing 30 scored days: the 25th–75th percentile band
+    /// plus the mean — WHOOP's "typical range". Pass nil for total asleep. Returns nil below 5
+    /// scored nights (honest cold-start: no fabricated range from a few days).
+    private func stageTypical(_ stage: SleepStage?) -> (lo: Double, hi: Double, mean: Double)? {
+        let values: [Double] = repo.days.suffix(30).compactMap { d in
+            switch stage {
+            case nil:     return d.totalSleepMin
+            case .light?: return d.lightMin
+            case .deep?:  return d.deepMin
+            case .rem?:   return d.remMin
+            case .awake?:
+                // Awake isn't a stored daily column; derive from in-bed minus asleep via efficiency.
+                guard let asleep = d.totalSleepMin, asleep > 0, var e = d.efficiency, e > 0 else { return nil }
+                if e > 1.5 { e /= 100 }   // efficiency arrives as % on some import paths
+                guard e > 0.3, e <= 1 else { return nil }
+                return asleep * (1 - e) / e
+            }
+        }.filter { $0 > 0 }.sorted()
+        guard values.count >= 5 else { return nil }
+        func pct(_ p: Double) -> Double {
+            let idx = p * Double(values.count - 1)
+            let l = Int(idx.rounded(.down)), u = Int(idx.rounded(.up))
+            let frac = idx - Double(l)
+            return values[l] * (1 - frac) + values[u] * frac
+        }
+        let mean = values.reduce(0, +) / Double(values.count)
+        return (pct(0.25), pct(0.75), mean)
+    }
+
+    /// 30-day mean restorative minutes (deep + REM per scored night).
+    private func restorativeTypical() -> Double? {
+        let values: [Double] = repo.days.suffix(30).compactMap { d in
+            guard let deep = d.deepMin, let rem = d.remMin else { return nil }
+            let v = deep + rem
+            return v > 0 ? v : nil
+        }
+        guard values.count >= 5 else { return nil }
+        return values.reduce(0, +) / Double(values.count)
     }
 
     /// One WHOOP stage row: header (STAGE · coloured % · right-aligned duration) above a hatched
