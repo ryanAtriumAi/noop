@@ -1034,7 +1034,36 @@ struct SettingsView: View {
         liquidTodayCard
         if showFiveMGControls { fiveMGCard }
         sleepStagingCard
+        weakSignalCard
         rawSensorDiagnosticsCard
+    }
+
+    /// Opt-in weak-signal PPG ("tattoo mode", WHOOP 5 only). Dark ink absorbs the strap's green
+    /// light, so a real pulse over a tattoo returns a much weaker optical signal than clean skin —
+    /// the default gate rejects those windows and the night shows HR gaps. This lowers the
+    /// acceptance floor (PpgPrefs.weakSignalFloor); recovered readings keep their true low
+    /// confidence and render as a weak (lighter) trace, never as clean measured beats.
+    @AppStorage(PpgPrefs.weakSignalKey) private var weakSignalEnabled = false
+    private var weakSignalCard: some View {
+        SettingsSection(
+            icon: "waveform.path.ecg",
+            title: "Experimental · Weak optical signal",
+            blurb: "For tattooed or low-perfusion skin, where the strap's light-based heart-rate signal comes back faint. Accepts weaker (but still periodic) optical readings instead of dropping them."
+        ) {
+            VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
+                Toggle(isOn: $weakSignalEnabled) {
+                    Text("Accept weak optical signal")
+                        .font(StrandFont.subhead)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                }
+                .toggleStyle(.switch)
+                .tint(StrandPalette.accent)
+                Text("WHOOP 5 optical (PPG) heart rate only. Recovered readings are marked low-confidence and drawn as a lighter trace — never presented as clean measured beats. If your wrist is heavily tattooed, wearing the strap higher on the forearm or on the bicep still gives the best signal. Applies to newly synced data.")
+                    .font(StrandFont.caption)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     /// Opt-in liquid Today redesign (default ON in this build). Off falls back to the

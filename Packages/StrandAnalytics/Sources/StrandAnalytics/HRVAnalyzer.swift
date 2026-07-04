@@ -60,6 +60,15 @@ public enum HRVAnalyzer {
         /// Count of clean NN intervals after range + ectopic filtering.
         public let nClean: Int
 
+        /// Share of the supplied beats the cleaning rejected (0 = pristine input, 1 = everything
+        /// dropped). Already implicit in `nInput`/`nClean` — surfaced so consumers can present an
+        /// HRV that barely survived cleaning (e.g. 20 clean beats out of 80 noisy ones) as
+        /// low-confidence rather than identically to a clean full-night read. Derived only, so
+        /// existing results and goldens are unchanged.
+        public var rejectedFraction: Double {
+            nInput > 0 ? 1.0 - Double(nClean) / Double(nInput) : 0
+        }
+
         public init(rmssd: Double?, sdnn: Double?, meanNN: Double?, pnn50: Double?,
                     nInput: Int, nClean: Int) {
             self.rmssd = rmssd
