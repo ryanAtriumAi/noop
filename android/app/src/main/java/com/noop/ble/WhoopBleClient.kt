@@ -538,6 +538,33 @@ class WhoopBleClient(
          *  (GATT_CONN_TERMINATE_LOCAL_HOST). Distinct from [GATT_CONN_TIMEOUT] (0x08, the strap/link timing
          *  out): a bounce we initiated must NOT be mistaken for the #617 loop's remote timeout. */
         private const val GATT_CONN_TERMINATE_LOCAL_HOST = 0x16  // GATT_CONN_TERMINATE_LOCAL_HOST (local host ended it)
+
+        /**
+         * #982: should this involuntary disconnect feed the #971 bond-watchdog give-up counter? A WHOOP 4.0
+         * that reaches STATE_CONNECTED and subscribes but never lands a genuine bond can self-drop (status 0)
+         * at ~7s, BEFORE the escalating bond watchdog fires — so [onBondWatchdog]'s recordBounce (which only
+         * runs when OUR OWN gatt.disconnect reports GATT_CONN_TERMINATE_LOCAL_HOST) never runs, and the #617
+         * [PostBondTimeoutLoopDetector] skips it (never bonded, and status != GATT_CONN_TIMEOUT). Neither
+         * give-up counter advances while STATE_CONNECTED keeps zeroing the reconnect backoff, so the connect →
+         * subscribe → drop loop runs unbounded and drains the battery (#982). Pulled out as a pure function so
+         * the gate is unit-testable without a BLE seam (same shape as [BondWatchdogBackoff]).
+         *
+         * True ONLY for that case: the link reached STATE_CONNECTED ([wasConnected]) but never bonded
+         * ([didBond] false), the drop was involuntary (not [intentionalDisconnect]), it was not the
+         * stale-direct-bond scan-fallback ([staleDirectBond]), it was not our OWN localTerminate bounce
+         * (already counted by [onBondWatchdog]), and we are not already paused. A healthy strap that bonds on
+         * the first connect has didBond == true, so it is never counted and its behaviour is unchanged.
+         */
+        internal fun shouldCountNeverBondedSelfDrop(
+            wasConnected: Boolean,
+            didBond: Boolean,
+            intentionalDisconnect: Boolean,
+            staleDirectBond: Boolean,
+            status: Int,
+            alreadyPausedForBondLoop: Boolean,
+        ): Boolean = wasConnected && !didBond && !intentionalDisconnect && !staleDirectBond &&
+            status != GATT_CONN_TERMINATE_LOCAL_HOST && !alreadyPausedForBondLoop
+
         /** Consecutive bond refusals on the pinned strap before handing the pin off to a different,
          *  live-bonding strap (#52). 3 (not 1): a single "insufficient" can be a transient just-works
          *  race; three in a row on the pin while ANOTHER strap bonds fine is an unrecoverable stale pin.
@@ -804,6 +831,21 @@ class WhoopBleClient(
         const val AUTO_CONTINUE_FUTURE_SKEW_SECONDS = 48L * 3600L
 
         /**
+         * #1012: is the strap-reported "newest banked record" FUTURE-dated beyond the skew allowance —
+         * more than [futureSkewSeconds] past the wall clock? The strap's clock is then almost certainly
+         * set in the future (#928), so its range answer AND its freshly-persisted rows are untrustworthy
+         * as backlog evidence. Pure, and shared between [shouldAutoContinue] (it gates 2a AND 2b) and the
+         * call site's honest stop log so the two can never disagree on the reason. null ⇒ false: an
+         * unanswered range is UNKNOWN, not future-dated, and 2b's stale-epoch rescue (#451) still applies
+         * to it. Mirrors the Swift `BackfillContinuation.isFutureDatedNewest`.
+         */
+        fun isFutureDatedNewest(
+            strapNewestTs: Long?,
+            wallNowUnix: Long,
+            futureSkewSeconds: Long = AUTO_CONTINUE_FUTURE_SKEW_SECONDS,
+        ): Boolean = strapNewestTs != null && strapNewestTs > wallNowUnix + futureSkewSeconds
+
+        /**
          * Decides whether a backfill session that ended on the 60s IDLE cap (NOT a true HISTORY_COMPLETE)
          * should immediately re-kick another offload instead of tearing down to wait the 900s periodic
          * floor (#364). The strap offloads OLDEST-first at ~60s/session with no auto-continue, so on a
@@ -822,6 +864,14 @@ class WhoopBleClient(
          *  3. [lastTrimAdvanced] — the just-ended session actually moved the strap's trim cursor. A frozen
          *     cursor (console-only / refusing to trim) would spin forever; stop and let the floor retry.
          *  4. [consecutiveCount] < [maxAutoContinues] — hard per-connection cap.
+         *
+         * #1012: a FUTURE-dated [strapNewestTs] (more than [futureSkewSeconds] past the wall clock, #928)
+         * not only nulls guard 2a — it also STOPS guard 2b. A future-clock strap banks future-dated
+         * records, so the rows it hands over are future-timestamped too and "real rows persisted" is no
+         * evidence of genuine backlog; 2b would chase the future-dated range through the whole cap (six
+         * back-to-back passes, each to its idle timeout — the reported ~15-min sync). The stale/PAST-epoch
+         * case 2b actually exists for (#451) reads BEHIND the frontier, never future-dated, so it is
+         * untouched.
          */
         fun shouldAutoContinue(
             stillConnected: Boolean,
@@ -841,12 +891,21 @@ class WhoopBleClient(
             // #928: a strap clock set in the FUTURE makes "newest" read ahead of ANY real frontier, so 2a
             // would report backlog forever and drive up to the full cap in EMPTY offloads on every
             // connect. A newest more than [futureSkewSeconds] past [wallNowUnix] (the REAL wall clock,
-            // passed in so the predicate stays pure) is implausible: exclude it (treat the range as
-            // unknown) so only demonstrated progress (2b, real rows) can continue the drain.
-            val newest = strapNewestTs?.takeIf { it <= wallNowUnix + futureSkewSeconds }
+            // passed in so the predicate stays pure) is implausible: exclude it from 2a.
+            val futureDated = isFutureDatedNewest(strapNewestTs, wallNowUnix, futureSkewSeconds)
+            val newest = strapNewestTs?.takeIf { !futureDated }
             val frontier = ourFrontierTs
             // 2a: strap reports newer data than we hold — reliable WHEN its clock epoch is sane.
             if (newest != null && frontier != null && (newest - frontier) > behindGapSeconds) return true
+            // #1012: a future-dated newest also gates 2b, not just 2a. A strap whose clock is set ahead
+            // (#928) BANKED future-dated records, so the rows this session persisted are themselves
+            // future-timestamped — "real rows" is NOT evidence of genuine backlog there, and 2b used to
+            // chase the future-dated range through the whole cap (six back-to-back passes, each run to
+            // its idle timeout: the reported ~15-min sync). Stop after this single pass; the periodic
+            // floor keeps draining across connects, restoring the pre-#928 single-pass behaviour. The
+            // stale/PAST-epoch case 2b exists for (#451) reads BEHIND the frontier, never future-dated,
+            // so it falls through untouched below.
+            if (futureDated) return false
             // 2b (#451): GET_DATA_RANGE's "newest" can read a STALE / wrong-epoch value — a strap that was
             // fully discharged (or carries a previous owner's history) banks records across multiple clock
             // epochs and can latch an OLD one (e.g. 2024 when the real newest is 2026). That false "already
@@ -1007,10 +1066,15 @@ class WhoopBleClient(
      *  The wire value is `incrementAndGet() and 0xFF` (0..255, wraps). iOS is @MainActor so needs no atomic. */
     private val seq = AtomicInteger(0)
 
-    /** True once the confirmed-write bond ACK lands (Swift `didBond`). */
+    /** True once the confirmed-write bond ACK lands (Swift `didBond`). @Volatile: written in a GATT
+     *  callback (binder thread on API 26/27) and read in the onBondWatchdog / keepAlive main-looper
+     *  timers, so it needs cross-thread visibility. (ryanbr, #1032) */
+    @Volatile
     private var didBond = false
 
-    /** Runs the connect handshake EXACTLY ONCE per connection (Swift `connectHandshakeDone`). */
+    /** Runs the connect handshake EXACTLY ONCE per connection (Swift `connectHandshakeDone`). @Volatile:
+     *  written in a GATT callback (binder thread), read in beginBackfill (main-looper timer). (ryanbr, #1032) */
+    @Volatile
     private var connectHandshakeDone = false
 
     /** True when the user asked to disconnect; suppresses the auto-rescan (Swift `intentionalDisconnect`).
@@ -1481,6 +1545,8 @@ class WhoopBleClient(
         // reconnect streak so this scan (and any reconnects it spawns) starts back at the snappy
         // LOW_LATENCY scan mode + the 3s backoff base, never inheriting a backed-off lower-power scan.
         resetReconnectBackoff()
+        // #1030 (ryanbr): an explicit user Connect supersedes any pending involuntary reconnect timer.
+        cancelPendingReconnect()
         selectedModel = model
         val adp = adapter
         // No Bluetooth LE hardware at all (most often an emulator / virtual device).
@@ -1603,6 +1669,8 @@ class WhoopBleClient(
     fun disconnect() {
         intentionalDisconnect = true
         handler.removeCallbacks(scanTimeoutRunnable)
+        // #1030 (ryanbr): a user teardown supersedes any pending involuntary reconnect timer.
+        cancelPendingReconnect()
         stopScan()
         // A user-initiated teardown is a clean slate: clear the #617 bond-loop streak so the next (manual)
         // reconnect starts fresh rather than inheriting old suspicion. Twin of macOS disconnect().
@@ -1662,6 +1730,8 @@ class WhoopBleClient(
     fun onBluetoothRadioOn() {
         handler.post {
             if (gatt != null || _state.value.connected) return@post   // already (re)connected
+            // #1030 (ryanbr): this radio-on reconnect supersedes any pending backoff timer (both branches below (re)connect).
+            cancelPendingReconnect()
             val dev = lastDevice
             // Multi-WHOOP: only fast-path reconnect to [lastDevice] when it's still the pinned strap; an
             // un-pinned (or differently-pinned) last device falls through to the pin-aware rescan, mirroring
@@ -1881,6 +1951,8 @@ class WhoopBleClient(
         selectedModel = model
         intentionalDisconnect = false
         log("Auto-reconnecting to your saved ${model.displayName}…")
+        // #1030 (ryanbr): a targeted reconnect supersedes any pending involuntary backoff timer.
+        cancelPendingReconnect()
         connectToDevice(device, autoConnect = true)
     }
 
@@ -2444,6 +2516,41 @@ class WhoopBleClient(
         failedReconnectAttempts = 0
     }
 
+    // #1030 (author: ryanbr): make the involuntary-reconnect timer CANCELLABLE so a stale backoff
+    // reconnect can't fire after the link is already back and tear down the live connection.
+    /** The pending involuntary-reconnect timer, if one is scheduled. Held as a field (NOT an inline
+     *  lambda) so a real (re)connect or an explicit user Connect can CANCEL it, and so its body can
+     *  no-op if we're already back — otherwise a stale backoff reconnect fires AFTER the link returns
+     *  and tears the live connection down (reset+close) or starts a redundant scan. iOS gets this free:
+     *  its connectCore() early-returns on an already-connected peripheral; this ports that guard. */
+    @Volatile
+    private var pendingReconnectRunnable: Runnable? = null
+
+    /** Schedule an involuntary reconnect [action] after [delayMs], replacing any already-pending timer.
+     *  When it fires the action is skipped if we've been told to stop (intentional teardown / bond-loop
+     *  pause) OR we're already connected-or-connecting — a stale timer must never tear down a live link. */
+    private fun scheduleReconnect(delayMs: Long, action: () -> Unit) {
+        cancelPendingReconnect()
+        val r = Runnable {
+            pendingReconnectRunnable = null
+            // #78 hole-3: a timer in flight when the give-up trips must not fire an extra attempt.
+            if (intentionalDisconnect || autoReconnectPausedForBondLoop) return@Runnable
+            // A reconnect that fires AFTER we've re-linked (user Connect / radio-on beat the timer) must
+            // not reset+close the live connection or start a redundant scan. handleDisconnect nulls `gatt`
+            // and sets connected=false BEFORE scheduling, so a genuinely-disconnected state still proceeds.
+            if (gatt != null || _state.value.connected) return@Runnable
+            action()
+        }
+        pendingReconnectRunnable = r
+        handler.postDelayed(r, delayMs)
+    }
+
+    /** Cancel any pending involuntary reconnect — a real (re)connect superseded it. */
+    private fun cancelPendingReconnect() {
+        pendingReconnectRunnable?.let { handler.removeCallbacks(it) }
+        pendingReconnectRunnable = null
+    }
+
     /** Clear the pairing-hint streak + any published hint for a FRESH user-initiated Connect (#78). Kept
      *  off the involuntary-reconnect path on purpose: the streak must SURVIVE automatic reconnects (like
      *  the #52 pinnedBondRefusals counter) so it can accumulate to the threshold across the strap dropping
@@ -2774,6 +2881,9 @@ class WhoopBleClient(
                 BluetoothProfile.STATE_CONNECTED -> {
                     // Port of didConnect: mark connected, negotiate a larger ATT MTU, THEN discover.
                     handler.removeCallbacks(scanTimeoutRunnable)
+                    // #1030 (ryanbr): a real link is up — cancel any pending involuntary reconnect so a
+                    // stale backoff timer can't fire and reset+close this connection.
+                    cancelPendingReconnect()
                     // A successful connect clears the reconnect backoff — the next involuntary drop
                     // starts the 3,6,12…s schedule afresh (iOS didConnect: failedConnectAttempts=0, #48).
                     resetReconnectBackoff()
@@ -3480,8 +3590,10 @@ class WhoopBleClient(
             while (idx + 1 < data.size) {
                 val raw = (data[idx].toInt() and 0xFF) or ((data[idx + 1].toInt() and 0xFF) shl 8)
                 idx += 2
-                // Convert 1/1024 s units to milliseconds (matches the WHOOP store's R-R in ms).
-                rr.add((raw * 1000) / 1024)
+                // Convert 1/1024 s units to milliseconds (matches the WHOOP store's R-R in ms). ROUNDED,
+                // byte-identical to StandardHeartRate.parse + the Swift twin; plain integer division
+                // truncated, diverging up to ~0.5 ms per interval into RMSSD/HRV. (ryanbr, #1032)
+                rr.add(Math.round(raw / 1024.0 * 1000.0).toInt())
             }
         }
 
@@ -4482,7 +4594,14 @@ class WhoopBleClient(
         Backfiller.sessionSummaryLine(
             backfiller.sessionRowsPersisted, backfiller.sessionMotionRows, backfiller.sessionSkinTempRows,
             backfiller.sessionNights,
-        )?.let { log(it) }
+        )?.let {
+            log(it)
+            // #990: fold this session's drained rows into the persisted ALL-TIME tally at the single
+            // summary emit point, so the Connection readout can show install-lifetime progress beside
+            // the per-session count (which resets on every reconnect). Unconditional, like the summary
+            // itself - not gated on the Connection test mode. Twin of the macOS LiveState sink hook.
+            testCentre.noteDrainedRows(backfiller.sessionRowsPersisted)
+        }
 
         // Connection test mode: the offload OUTCOME the readout's lastOffloadResult id binds. Gated
         // zero-cost (the CONNECTION bool is read before any string is built). Diagnostic only - it reads
@@ -4548,16 +4667,35 @@ class WhoopBleClient(
         val count = consecutiveAutoContinues
         ioScope.launch {
             val frontier = runCatching { repository.latestHrSampleTs(deviceId) }.getOrNull()
+            val wallNow = System.currentTimeMillis() / 1000L   // #928: real wall clock, at decision time
+            val stillConnected = _state.value.connected && _state.value.bonded
             if (!shouldAutoContinue(
-                    stillConnected = _state.value.connected && _state.value.bonded,
+                    stillConnected = stillConnected,
                     strapNewestTs = newest,
                     ourFrontierTs = frontier,
-                    wallNowUnix = System.currentTimeMillis() / 1000L,   // #928: real wall clock, at decision time
+                    wallNowUnix = wallNow,
                     lastTrimAdvanced = trimAdvanced,
                     consecutiveCount = count,
                     rowsPersistedThisSession = rowsPersisted,
                 )
             ) {
+                // #1012: name the stop honestly when the future-clock gate is what ended the chain —
+                // without this line the log just goes quiet after one pass and a strap-log export can't
+                // tell "caught up" from "future-dated range refused". Fires ONLY when 2b would otherwise
+                // have continued (still connected, rows banked, trim advanced, under the cap), so a
+                // frozen-trim / cap / disconnect stop is never misattributed to the clock. Twin of the
+                // Swift maybeAutoContinueBackfill line.
+                if (stillConnected && rowsPersisted > 0 && trimAdvanced &&
+                    count < MAX_AUTO_CONTINUES && isFutureDatedNewest(newest, wallNow)
+                ) {
+                    val aheadH = ((newest ?: wallNow) - wallNow) / 3600L
+                    log(
+                        "Backfill: not auto-continuing (#1012) - the strap-reported newest banked record " +
+                            "reads ${aheadH}h AHEAD of the wall clock, so the range is future-dated and " +
+                            "the strap clock is likely wrong (#928). Stopping after one pass instead of " +
+                            "chasing future-dated ranges; the periodic sync keeps draining across connects.",
+                    )
+                }
                 // No re-kick. THIS is the real "we're done draining" signal (#25): clear the streak so the
                 // NEXT deep backlog (e.g. after the app's been off again) gets a fresh budget of re-kicks.
                 // Reset here — NOT unconditionally on every HISTORY_COMPLETE — so a strap that slices one
@@ -4723,6 +4861,40 @@ class WhoopBleClient(
         }
         bondedAtMs = null   // cleared after the bond-loop detector above read it (#617)
 
+        // #982: the OTHER unbounded loop — a strap that connects + subscribes but never bonds, then
+        // self-drops (status 0) BEFORE the escalating bond watchdog fires, advances neither give-up counter
+        // ([onBondWatchdog] only counts its own localTerminate bounce; #617 needs a genuine bond + a
+        // GATT_CONN_TIMEOUT). Feed THIS drop into the SAME #971 give-up counter so the loop is bounded and
+        // hands off to the identical re-pair guide + paused auto-reconnect. `didBond` is still valid here
+        // ([reset] clears it below); [shouldCountNeverBondedSelfDrop] excludes our own localTerminate bounce
+        // to avoid double-counting a cycle. recordBounce() (short-circuited off the gate) increments the
+        // shared streak and returns true only on the bounce that first crosses the give-up threshold.
+        if (shouldCountNeverBondedSelfDrop(
+                wasConnected = wasConnected,
+                didBond = didBond,
+                intentionalDisconnect = intentionalDisconnect,
+                staleDirectBond = staleDirectBond,
+                status = status,
+                alreadyPausedForBondLoop = autoReconnectPausedForBondLoop,
+            ) && bondWatchdogBackoff.recordBounce()
+        ) {
+            log("Strap connects and subscribes but never finishes pairing, then self-drops before the bond watchdog fires (${bondWatchdogBackoff.consecutiveBounces} cycles) — pausing auto-reconnect and surfacing the re-pair guide (#982/#971)")
+            autoReconnectPausedForBondLoop = true
+            bondLoopPausedAtMs = System.currentTimeMillis()   // the #78 hole-4 salvage probe covers this pause too
+            if (_state.value.reconnectGuide == null) {
+                _state.update { it.copy(
+                    reconnectGuide = """
+                    Your strap connects but never finishes pairing with NOOP, so it drops and retries in a loop. This is almost always a stale Bluetooth pairing, usually after a WHOOP firmware update, or the official WHOOP app holding the strap. NOOP works fine once it's re-paired:
+
+                    1. Quit the official WHOOP app (or turn off Bluetooth on that phone).
+                    2. Open Settings → Bluetooth, find your WHOOP, and Forget / Unpair it.
+                    3. Tap the band repeatedly until its LEDs flash blue (pairing mode).
+                    4. Come back here and tap Connect.
+                    """.trimIndent()
+                ) }
+            }
+        }
+
         // Persist anything buffered before tearing down (port of the collector.flush() +
         // flushStandardHR() calls in didDisconnectPeripheral). Runs on the IO scope.
         ioScope.launch { flushLive(); flushStandardHr() }
@@ -4803,10 +4975,9 @@ class WhoopBleClient(
                         """.trimIndent()
                     ) }
                 }
-                handler.postDelayed({
-                    // #78 hole-3: a timer in flight when the give-up trips must not fire an extra attempt.
-                    if (!intentionalDisconnect && !autoReconnectPausedForBondLoop) connect(selectedModel)
-                }, RECONNECT_DELAY_MS)
+                // #1030 (ryanbr): route through scheduleReconnect so this backoff timer is cancellable
+                // and can't tear down a link that returns before it fires.
+                scheduleReconnect(RECONNECT_DELAY_MS) { connect(selectedModel) }
                 return
             }
             val dev = lastDevice
@@ -4825,17 +4996,13 @@ class WhoopBleClient(
                 // resets on the next STATE_CONNECTED and on an explicit user Connect. (#48)
                 val directDelay = nextReconnectDelayMs()
                 log("Disconnected (status=$status); reconnecting directly in ${directDelay / 1000}s (attempt $failedReconnectAttempts)")
-                handler.postDelayed({
-                    // #78 hole-3: a timer in flight when the give-up trips must not fire an extra attempt.
-                    if (!intentionalDisconnect && !autoReconnectPausedForBondLoop) connectToDevice(dev, autoConnect = true)
-                }, directDelay)
+                // #1030 (ryanbr): cancellable backoff timer (see scheduleReconnect).
+                scheduleReconnect(directDelay) { connectToDevice(dev, autoConnect = true) }
             } else {
                 val rescanDelay = nextReconnectDelayMs()
                 log("Disconnected (status=$status); rescanning in ${rescanDelay / 1000}s (attempt $failedReconnectAttempts)")
-                handler.postDelayed({
-                    // #78 hole-3: a timer in flight when the give-up trips must not fire an extra attempt.
-                    if (!intentionalDisconnect && !autoReconnectPausedForBondLoop) connect(selectedModel)
-                }, rescanDelay)
+                // #1030 (ryanbr): cancellable backoff timer (see scheduleReconnect).
+                scheduleReconnect(rescanDelay) { connect(selectedModel) }
             }
         } else {
             log("Disconnected (intentional)")

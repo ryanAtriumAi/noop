@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "%lld days ago"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "há %lld dias"
+          }
         }
       }
     },
@@ -31,6 +37,12 @@
             "value": "%lld ore"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld horas"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -52,6 +64,12 @@
             "state": "translated",
             "value": "%lld minutes"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld minutos"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld points, mean %@, range %@ to %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld pontos, média %@, intervalo de %@ a %@"
           }
         }
       }
@@ -72,6 +96,12 @@
             "state": "translated",
             "value": "%lld readings"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld leituras"
+          }
         }
       }
     },
@@ -82,6 +112,12 @@
             "state": "translated",
             "value": "%lld workouts"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld treinos"
+          }
         }
       }
     },
@@ -91,6 +127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lldd ago"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "há %lldd"
           }
         }
       }
@@ -115,6 +157,12 @@
             "value": "%lldh fa"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "há %lldh"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -135,6 +183,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lldm ago"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "há %lldm"
           }
         }
       }
@@ -159,6 +213,12 @@
             "value": "1 ora"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "1 hora"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -180,6 +240,12 @@
             "state": "translated",
             "value": "1 minute"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "1 minuto"
+          }
         }
       }
     },
@@ -190,6 +256,12 @@
             "state": "translated",
             "value": "1 workout"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "1 treino"
+          }
         }
       }
     },
@@ -199,6 +271,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ALL-OUT"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MÁXIMO"
           }
         }
       }
@@ -235,6 +313,12 @@
             "value": "Sveglio"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Acordado"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -262,6 +346,12 @@
             "state": "translated",
             "value": "Classic"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Clássico"
+          }
         }
       }
     },
@@ -272,6 +362,12 @@
             "state": "translated",
             "value": "DEPLETED"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ESGOTADO"
+          }
         }
       }
     },
@@ -281,6 +377,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dark"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Escuro"
           }
         }
       }
@@ -315,6 +417,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Profondo"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Profundo"
           }
         },
         "ru": {
@@ -357,6 +465,12 @@
             "value": "Predefinito"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Predefinição"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -391,6 +505,12 @@
             "value": "ALTO"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ALTO"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -411,6 +531,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LIGHT"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "LEVE"
           }
         }
       }
@@ -433,6 +559,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "BASSO"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "BAIXO"
           }
         },
         "zh-Hans": {
@@ -481,6 +613,12 @@
             "value": "Leggero"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Leve"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -507,6 +645,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "MODERATE"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "MODERADO"
           }
         }
       }
@@ -543,6 +687,12 @@
             "value": "Nessun dato"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sem dados"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -570,6 +720,12 @@
             "state": "translated",
             "value": "No heart-rate data"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sem dados de frequência cardíaca"
+          }
         }
       }
     },
@@ -593,6 +749,12 @@
             "value": "PICCO"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "PICO"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -614,6 +776,12 @@
             "state": "translated",
             "value": "PRIMED"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "PREPARADO"
+          }
         }
       }
     },
@@ -623,6 +791,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recovery calendar, %lld days, average %lld, low %lld, high %lld"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Calendário de recuperação, %lld dias, média %lld, mín %lld, máx %lld"
           }
         }
       }
@@ -634,6 +808,12 @@
             "state": "translated",
             "value": "Recovery calendar, no data"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Calendário de recuperação, sem dados"
+          }
         }
       }
     },
@@ -643,6 +823,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "STRENUOUS"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "EXTENUANTE"
           }
         }
       }
@@ -654,6 +840,12 @@
             "state": "translated",
             "value": "Sleep stages, %@"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Fases do sono, %@"
+          }
         }
       }
     },
@@ -664,6 +856,12 @@
             "state": "translated",
             "value": "Sleep stages, no data"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Fases do sono, sem dados"
+          }
         }
       }
     },
@@ -673,6 +871,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "System"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sistema"
           }
         }
       }
@@ -709,6 +913,12 @@
             "value": "Oggi"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Hoje"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -736,6 +946,12 @@
             "state": "translated",
             "value": "Trend, %lld points, latest %@, low %@, high %@"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Tendência, %lld pontos, mais recente %@, mín %@, máx %@"
+          }
         }
       }
     },
@@ -759,6 +975,12 @@
             "value": "Ieri"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Ontem"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -780,6 +1002,12 @@
             "state": "translated",
             "value": "asleep %@"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "a dormir %@"
+          }
         }
       }
     },
@@ -789,6 +1017,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "average %@ bpm"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "média %@ bpm"
           }
         }
       }
@@ -813,6 +1047,12 @@
             "value": "proprio ora"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "agora mesmo"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -833,6 +1073,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "range %@ to %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "intervalo de %@ a %@"
           }
         }
       }

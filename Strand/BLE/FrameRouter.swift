@@ -27,6 +27,10 @@ public final class FrameRouter {
         // Reject frames that failed their checksum — never let bad bytes drive state.
         if parsed.crcOK == false { return }
 
+        // #987: stamp frame liveness for the Connection readout's "last frame" row. A plain (non-
+        // published, see LiveState) Int write, so the raw flood costs no re-renders here.
+        state.noteFrameRouted()
+
         // live perf: only republish when the value actually changed. The type-43 raw flood arrives
         // continuously and repeats the SAME frame type, and each `@Published` write fires
         // `objectWillChange` → a full LiveView.body re-eval (these frames are separate BLE

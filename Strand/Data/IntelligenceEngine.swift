@@ -486,14 +486,41 @@ final class IntelligenceEngine: ObservableObject {
                 let dayEnd = dayMid + 86_400 - 1
                 // Same `owner` as the night window above (I2): the additive day totals must come from the
                 // one device that owns the day, never a mix.
-                let dayHr = (try? await store.hrSamples(deviceId: owner, from: dayMid, to: dayEnd, limit: 200_000)) ?? []
-                let daySteps = (try? await store.stepSamples(deviceId: owner, from: dayMid, to: dayEnd, limit: 200_000)) ?? []
+                // #997 (ryanbr): for a PAST day (20 of 21 in the default scan) the night window above reads
+                // through to nextMidnight, so the calendar day [dayMid, dayEnd] is a strict subset of the
+                // hr/steps/grav lists already in memory — derive the day streams by filtering them
+                // (AnalyticsEngine.daySliceFromNight) instead of a second store read (~60 redundant reads
+                // per pass, incl. the big HR ones). TODAY (its day runs past the 18 h night cap) and a
+                // night read that hit the 200_000 limit DECLINE (nil) and read directly, so the shortcut
+                // can only ever skip work, never change data. Byte-identical: same owner, same inclusive
+                // bounds, same ts-ASC order as the direct read. (`??` can't take an `await` right-hand
+                // side, hence the explicit if/else at each site.)
+                let dayHr: [HRSample]
+                if let slice = AnalyticsEngine.daySliceFromNight(hr, nightLo: from, nightHi: to,
+                                                                 dayLo: dayMid, dayHi: dayEnd, ts: { $0.ts }) {
+                    dayHr = slice
+                } else {
+                    dayHr = (try? await store.hrSamples(deviceId: owner, from: dayMid, to: dayEnd, limit: 200_000)) ?? []
+                }
+                let daySteps: [StepSample]
+                if let slice = AnalyticsEngine.daySliceFromNight(steps, nightLo: from, nightHi: to,
+                                                                 dayLo: dayMid, dayHi: dayEnd, ts: { $0.ts }) {
+                    daySteps = slice
+                } else {
+                    daySteps = (try? await store.stepSamples(deviceId: owner, from: dayMid, to: dayEnd, limit: 200_000)) ?? []
+                }
                 // Full calendar-day gravity for WORKOUT detection. The night window above ends at
                 // dayStart+12h (≈ noon), so an afternoon/evening workout sits outside it and was only
                 // detected once a later pass re-read it through the next night window , a ~day lag. This
                 // [localMidnight, localMidnight+24h) read (today: clamped to `now` by the store) lets the
                 // detector see the whole day, so a 5 pm run shows up on the same day.
-                let dayGrav = (try? await store.gravitySamples(deviceId: owner, from: dayMid, to: dayEnd, limit: 200_000)) ?? []
+                let dayGrav: [GravitySample]
+                if let slice = AnalyticsEngine.daySliceFromNight(grav, nightLo: from, nightHi: to,
+                                                                 dayLo: dayMid, dayHi: dayEnd, ts: { $0.ts }) {
+                    dayGrav = slice
+                } else {
+                    dayGrav = (try? await store.gravitySamples(deviceId: owner, from: dayMid, to: dayEnd, limit: 200_000)) ?? []
+                }
 
                 // CONSUME (#531 / #175): the strap's OWN band sleep_state for the night window as timestamped
                 // (ts, state) samples, so the H7 morning-stillness guard can confirm a borderline re-onset
@@ -1241,8 +1268,20 @@ final class IntelligenceEngine: ObservableObject {
         // No registry rows (shouldn't happen , v15 seeds one , but be safe): keep the legacy id.
         guard !devices.isEmpty else { return fallbackDeviceId }
 
+        let liveDevices = devices.filter { $0.status != .archived }
+        // #970: the default single-WHOOP install has exactly one live device that IS the fallback id, so
+        // the owner is a foregone conclusion — the resolver returns that id whether or not it has data in
+        // this window (active priority 0 -> its id; or no candidate has data -> nil -> fallbackDeviceId,
+        // both == fallbackDeviceId here). Skip the per-day LIMIT-1 HR probe in that case (called once per
+        // scanned day, so it saves ~maxDays tiny reads per analyzeRecent). Byte-identical to the loop. The
+        // guard is deliberately `== fallbackDeviceId`: a lone IMPORT device whose id differs would NOT be
+        // byte-identical (no-data -> fallback, not its own id), so it must still take the probe path.
+        if liveDevices.count == 1, liveDevices[0].id == fallbackDeviceId {
+            return fallbackDeviceId
+        }
+
         var candidates: [DayOwnerResolver.Candidate] = []
-        for d in devices where d.status != .archived {
+        for d in liveDevices {
             let isImport = d.sourceKind == .cloudImport || d.sourceKind == .fileImport
             let priority = d.id == activeId ? 0 : (isImport ? 2 : 1)
             // Cheap presence check: a single HR row for this device in the night window is enough to

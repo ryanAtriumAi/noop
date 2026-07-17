@@ -153,6 +153,11 @@ public final class OuraLiveSource: NSObject, ObservableObject {
     private var loggedFirstSpo2 = false
     /// Logs the FIRST ring-time -> UTC anchor of this session only (s5.5); reset on stop/disconnect.
     private var loggedAnchor = false
+    /// Tier-B (UNVERIFIED) kinds ("activity" / "real_steps" / "sleep_summary" / "spo2_smoothed") already
+    /// logged this session, so a repeated tag logs once per KIND, not once per record. INVESTIGATION
+    /// ONLY (see the `allowTierB: true` comment at driver construction) - the log is how we collect raw
+    /// captures to validate these layouts; nothing here ever persists or scores. Reset on stop/disconnect.
+    private var loggedTierBKinds: Set<String> = []
     /// History-fetched events decoded BEFORE a ring-time -> UTC anchor exists this session, held here
     /// (with their own ring timestamp) until the anchor lands (`drainPendingAnchorEvents`), so they get
     /// their real historical time instead of a premature wall-clock guess. The ring's 0x42 time-sync can
@@ -422,6 +427,7 @@ public final class OuraLiveSource: NSObject, ObservableObject {
         loggedFirstTemp = false
         loggedFirstSpo2 = false
         loggedAnchor = false
+        loggedTierBKinds.removeAll()
         reachedStreaming = false
         pendingInstallKey = nil
         adoptPhase = .idle
@@ -660,8 +666,29 @@ public final class OuraLiveSource: NSObject, ObservableObject {
                 // Anything parked while unanchored gets its real time retroactively the moment an anchor lands.
                 drainPendingAnchorEvents()
 
+            case .tierB(let summary):
+                // INVESTIGATION ONLY (real_steps / activity-summary / sleep-summary / smoothed-SpO2,
+                // OURA_PROTOCOL.md s7.3 Tier B; PR #960). Logged ONCE PER KIND with the raw bytes so we
+                // can see whether the ring sends these tags at all and collect capture material - e.g.
+                // real_steps 0x7E/0x7F is server-flag-gated OFF by default ([open_oura-feat]), so its
+                // continued absence here is the ring's doing, not a decode gap. Never persisted, never
+                // scored (OuraStreamMapping drops .tierB unconditionally regardless of this log).
+                if !loggedTierBKinds.contains(summary.kind) {
+                    loggedTierBKinds.insert(summary.kind)
+                    let hex = summary.rawPayload.map { String(format: "%02x", $0) }.joined(separator: " ")
+                    log("Oura: Tier-B \(summary.kind) seen (tag 0x\(String(summary.tag, radix: 16))) - raw: \(hex)")
+                }
+
+            case .activityInfo(let info):
+                // INVESTIGATION ONLY (0x50 activity/MET, Tier B - a plausible third-party formula, NOT
+                // ground-truth-validated; see OuraActivityInfo). Logged with the DECODED state/MET values
+                // every time (not once-per-kind): this is the tag under active plausibility evaluation, so
+                // every real capture is evidence. Never persisted, never scored, and NEVER converted into
+                // steps (MET is not a step count; OuraStreamMapping drops .activityInfo unconditionally).
+                log("Oura: activity (Tier-B) state=\(info.state) met=\(info.met)")
+
             default:
-                break   // motion / state / rtcBeacon / debugText / tierB: not a durable Streams row (see OuraStreamMapping)
+                break   // motion / state / rtcBeacon / debugText: not a durable Streams row (see OuraStreamMapping)
             }
         }
     }
@@ -796,14 +823,21 @@ extension OuraLiveSource: @preconcurrency CBCentralManagerDelegate {
         // driver's `allowKeyInstall` is gated on this connection's adopt consent ONLY: with no consent the
         // dangerous `0x24` installKey can never be sequenced, so a read-only / Advanced-key connect stays
         // honest (it announces needs-pairing instead of provisioning). Per OURA_PROTOCOL.md s3.2.
+        // allowTierB: true - INVESTIGATION ONLY (activity/real_steps/sleep-summary/smoothed-SpO2 tags,
+        // OURA_PROTOCOL.md s7.3 Tier B, UNVERIFIED layouts; PR #960). This lets `ingest` LOG what the
+        // ring actually sends (raw bytes per kind, decoded MET for 0x50) so the layouts can be validated
+        // against real captures. It can never leak a value into scoring: OuraStreamMapping drops
+        // .tierB/.activityInfo unconditionally - the Tier-discipline gate that matters lives there, not here.
         driver = OuraDriver(ringGen: ringGen,
                             authKey: authKey().map { [UInt8]($0) },
+                            allowTierB: true,
                             allowKeyInstall: adoptIntent)
         reachedStreaming = false
         loggedFirstHR = false
         loggedFirstTemp = false
         loggedFirstSpo2 = false
         loggedAnchor = false
+        loggedTierBKinds.removeAll()
         pendingAnchorEvents.removeAll()   // a fresh session must never replay a stale-anchor guess
         pendingInstallKey = nil
         adoptPhase = .idle
@@ -850,6 +884,7 @@ extension OuraLiveSource: @preconcurrency CBCentralManagerDelegate {
         loggedFirstTemp = false
         loggedFirstSpo2 = false
         loggedAnchor = false
+        loggedTierBKinds.removeAll()
         reachedStreaming = false
         pendingInstallKey = nil
         // A disconnect MID-install is an honest failure (no ack came); a disconnect after streaming leaves

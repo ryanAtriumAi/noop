@@ -21,6 +21,12 @@
             "value": "%@ resp/min"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ resp/min"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -52,6 +58,12 @@
         "it": {
           "stringUnit": {
             "state": "translated",
+            "value": "Ritmo %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
             "value": "Ritmo %@"
           }
         },
@@ -89,6 +101,12 @@
             "value": "%@ · %@s dentro / %@s fuori"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%@ · %@s inspira / %@s expira"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -120,6 +138,12 @@
         "it": {
           "stringUnit": {
             "state": "translated",
+            "value": "%@ · %lld kcal"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
             "value": "%@ · %lld kcal"
           }
         },
@@ -157,6 +181,12 @@
             "value": "%lld respiri · %@"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%lld respirações · %@"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -189,6 +219,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$lld secondi rimanenti in %2$@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "%1$lld segundos restantes em %2$@"
           }
         },
         "zh-Hans": {
@@ -225,6 +261,12 @@
             "value": "Consenti accesso"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Permitir acesso"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -257,6 +299,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Box"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Caixa"
           }
         },
         "zh-Hans": {
@@ -305,6 +353,12 @@
             "value": "Respira"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Respirar"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -345,6 +399,12 @@
             "value": "Inspira"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Inspira"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -377,6 +437,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inspira per %lld secondi"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Inspira durante %lld segundos"
           }
         },
         "zh-Hans": {
@@ -413,6 +479,12 @@
             "value": "Espira"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Expira"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -445,6 +517,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Espira per %lld secondi"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Expira durante %lld segundos"
           }
         },
         "zh-Hans": {
@@ -493,6 +571,12 @@
             "value": "Carica"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Carga"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -533,6 +617,12 @@
             "value": "Coerenza"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Coerência"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -567,6 +657,12 @@
             "value": "FATTO"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "CONCLUÍDO"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -599,6 +695,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fatto"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Concluído"
           }
         },
         "zh-Hans": {
@@ -647,6 +749,12 @@
             "value": "Sforzo"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Esforço"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -687,6 +795,12 @@
             "value": "Fine"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Terminar"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -719,6 +833,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Termina allenamento"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Terminar treino"
           }
         },
         "zh-Hans": {
@@ -755,6 +875,12 @@
             "value": "Forza funzionale"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Força funcional"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -787,6 +913,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Concedi l'accesso a Salute"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Conceder acesso à Saúde"
           }
         },
         "zh-Hans": {
@@ -835,6 +967,12 @@
             "value": "FREQUENZA CARDIACA"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "FREQUÊNCIA CARDÍACA"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -875,6 +1013,12 @@
             "value": "FC non disponibile"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "FC indisponível"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -907,6 +1051,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Frequenza cardiaca ed energia in diretta, registrate al polso. Restano sul dispositivo."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Frequência cardíaca e energia em tempo real, registadas no pulso. Ficam no dispositivo."
           }
         },
         "zh-Hans": {
@@ -943,6 +1093,12 @@
             "value": "Apri NOOP sul tuo iPhone per sincronizzare"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Abre o NOOP no iPhone para sincronizar"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -975,6 +1131,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "IN PAUSA"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "EM PAUSA"
           }
         },
         "zh-Hans": {
@@ -1023,6 +1185,12 @@
             "value": "Pausa"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Pausar"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -1063,6 +1231,12 @@
             "value": "REGISTRAZIONE"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "A GRAVAR"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1095,6 +1269,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "RIPOSO"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "DESCANSO"
           }
         },
         "zh-Hans": {
@@ -1131,6 +1311,12 @@
             "value": "Pronto a respirare"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Pronto para respirar"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1163,6 +1349,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rilassati"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Relaxa"
           }
         },
         "zh-Hans": {
@@ -1209,6 +1401,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reimposta"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Repor"
           }
         },
         "ru": {
@@ -1263,6 +1461,12 @@
             "value": "Riposo"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Descanso"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -1315,6 +1519,12 @@
             "value": "Riavvia"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Reiniciar"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -1355,6 +1565,12 @@
             "value": "Riprendi"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Retomar"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1387,6 +1603,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Round %lld di %lld"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Ronda %lld de %lld"
           }
         },
         "zh-Hans": {
@@ -1423,6 +1645,12 @@
             "value": "SEC"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "SEG"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1455,6 +1683,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sessione completata"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Sessão concluída"
           }
         },
         "zh-Hans": {
@@ -1501,6 +1735,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avvia"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Iniciar"
           }
         },
         "ru": {
@@ -1555,6 +1795,12 @@
             "value": "Avvia sessione"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Iniciar sessão"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -1593,6 +1839,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ferma"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Parar"
           }
         },
         "zh-Hans": {
@@ -1641,6 +1893,12 @@
             "value": "Termina sessione"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Parar sessão"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -1681,6 +1939,12 @@
             "value": "LAVORO"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "TRABALHO"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1713,6 +1977,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allenamento"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Treino"
           }
         },
         "zh-Hans": {
@@ -1749,6 +2019,12 @@
             "value": "Allenamento salvato"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "Treino guardado"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1781,6 +2057,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "al %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "em %@"
           }
         },
         "zh-Hans": {
@@ -1829,6 +2111,12 @@
             "value": "bpm"
           }
         },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "bpm"
+          }
+        },
         "ru": {
           "stringUnit": {
             "state": "translated",
@@ -1856,6 +2144,12 @@
             "state": "translated",
             "value": "cal"
           }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "cal"
+          }
         }
       }
     },
@@ -1877,6 +2171,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "obsoleto · %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "desatualizado · %@"
           }
         },
         "zh-Hans": {

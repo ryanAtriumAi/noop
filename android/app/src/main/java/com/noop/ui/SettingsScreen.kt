@@ -220,6 +220,39 @@ class ProfileStore(private val prefs: SharedPreferences) {
     /** Effective HR-max: the manual override if set, else the Tanaka estimate. */
     val hrMax: Int get() = if (hrMaxOverride > 0) hrMaxOverride else hrMaxAuto
 
+    // ── Backup settings snapshot/apply (#1000) ──────────────────────────────────────────────────
+    // The profile half of a `.noopbak`'s `settings.json`. Canonical key strings mirror
+    // `BackupSettingsCodec.WHITELIST` (and the Apple `BackupSettings.whitelist`) exactly — note
+    // canonical `profile.hrMax` maps onto this store's `hr_max_override` pref. Lives on ProfileStore
+    // because only it knows its private pref keys; `contains` checks keep never-set fields OUT of the
+    // snapshot so restoring on another device doesn't stamp defaults over that device's real values.
+
+    /** The user-SET profile fields, keyed canonically, for the backup exporter. */
+    fun backupSnapshot(): Map<String, Any> {
+        val out = LinkedHashMap<String, Any>()
+        if (prefs.contains(KEY_AGE)) out["profile.age"] = age
+        if (prefs.contains(KEY_SEX)) out["profile.sex"] = sex
+        if (prefs.contains(KEY_WEIGHT)) out["profile.weightKg"] = weightKg
+        if (prefs.contains(KEY_HEIGHT)) out["profile.heightCm"] = heightCm
+        if (prefs.contains(KEY_WAIST)) out["profile.waistCm"] = waistCm
+        if (prefs.contains(KEY_HRMAX)) out["profile.hrMax"] = hrMaxOverride
+        return out
+    }
+
+    /**
+     * Apply a restored backup's profile fields (canonical keys, already whitelist-filtered by
+     * `BackupSettingsCodec.decode`). Missing keys leave the current values alone; every write goes
+     * through the property setters, so the usual range clamps apply.
+     */
+    fun applyBackup(values: Map<String, Any>) {
+        (values["profile.age"] as? Number)?.let { age = it.toInt() }
+        (values["profile.sex"] as? String)?.let { sex = it }
+        (values["profile.weightKg"] as? Number)?.let { weightKg = it.toDouble() }
+        (values["profile.heightCm"] as? Number)?.let { heightCm = it.toDouble() }
+        (values["profile.waistCm"] as? Number)?.let { waistCm = it.toDouble() }
+        (values["profile.hrMax"] as? Number)?.let { hrMaxOverride = it.toInt() }
+    }
+
     companion object {
         private const val PREFS = "noop_profile"
         private const val KEY_AGE = "age"
@@ -392,6 +425,9 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
     var workoutKeepScreenOn by remember {
         mutableStateOf(NoopPrefs.of(context).getBoolean("workoutKeepScreenOn", false))
     }
+    // Live Sessions (beta) — gates the Today "Start session" entry. Unlike its section-mates this is a
+    // BETA feature flag, default ON (`live_sessions_beta`, see LiveSessionPrefs); off hides the entry.
+    var liveSessionsBeta by remember { mutableStateOf(LiveSessionPrefs.enabled(context)) }
 
     // Scheduled debug export (#510) — the daily auto-export toggle + time-of-day. The settings object is
     // its own SharedPreferences store; SharedPreferences isn't reactive, so the Switch + TimeChip mirror
@@ -1698,6 +1734,18 @@ fun SettingsScreen(vm: AppViewModel, onOpenTestCentre: () -> Unit = {}) {
                     onCheckedChange = {
                         workoutKeepScreenOn = it
                         NoopPrefs.of(context).edit().putBoolean("workoutKeepScreenOn", it).apply()
+                    },
+                )
+                RowDivider()
+                // BETA + default ON (the one exception to this section's off-by-default rule): the flag
+                // gates the Today entry so anyone can wave the beta away here with one flip.
+                ToggleRow(
+                    title = "Live Sessions (beta)",
+                    detail = "Silence-first strap coaching during workouts.",
+                    checked = liveSessionsBeta,
+                    onCheckedChange = {
+                        liveSessionsBeta = it
+                        LiveSessionPrefs.setEnabled(context, it)
                     },
                 )
                 RowDivider()

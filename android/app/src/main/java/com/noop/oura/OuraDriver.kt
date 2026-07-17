@@ -294,9 +294,14 @@ class OuraDriver(
         val anchorMs = anchorUtcMs ?: return null
         val anchorRt = anchorRingTime ?: return null
         val deltaTicks = forRingTimestamp - anchorRt
-        val ms = anchorMs + deltaTicks * 100   // default 100 ms/tick (s5.5)
-        if (ms <= 0) return null
-        return ms / 1000
+        val ms = anchorMs + deltaTicks * 100   // default 100 ms/tick (s5.5); bounded input, no overflow
+        // #968: a corrupt/misaligned ring timestamp (seen on a full cursor=0 history dump) can convert to
+        // an implausible epoch. Gate the RESULT to the same 2020-2035 plausible window used for anchoring
+        // (was a weak `ms <= 0`), so the caller honestly falls back to arrival time instead of banking a
+        // 1970 or far-future sample. Byte-identical to the Swift twin.
+        val seconds = ms / 1000
+        if (seconds < MIN_PLAUSIBLE_EPOCH_SECONDS || seconds > MAX_PLAUSIBLE_EPOCH_SECONDS) return null
+        return seconds
     }
 
     /**
@@ -429,7 +434,14 @@ class OuraDriver(
                         ),
                     ),
                 )
-            OuraEventTag.ACTIVITY_INFO, OuraEventTag.ACTIVITY_SUMMARY_1, OuraEventTag.ACTIVITY_SUMMARY_2 ->
+            OuraEventTag.ACTIVITY_INFO ->
+                // Split out of the raw-bytes TierB wrapper: this ONE activity tag has a plausible decode
+                // formula (OuraDecoders.decodeActivityInfo, third-party [oura-rs], PR #960 investigation).
+                // Still Tier B - only reached behind allowTierB (gated above), and OuraStreamMapping never
+                // folds ActivityInfo into a durable stream. 0x51/0x52 summaries stay raw below.
+                OuraDecoders.decodeActivityInfo(record)?.let { listOf(OuraEvent.ActivityInfo(it)) }
+                    ?: emptyList()
+            OuraEventTag.ACTIVITY_SUMMARY_1, OuraEventTag.ACTIVITY_SUMMARY_2 ->
                 listOf(
                     OuraEvent.TierB(
                         OuraTierBSummary(

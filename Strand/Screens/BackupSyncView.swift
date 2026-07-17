@@ -129,7 +129,20 @@ struct BackupSyncView: View {
         #if os(macOS)
         if FolderBackup.pickFolder() != nil { folderLabel = FolderBackup.folderLabel() }
         #else
-        Task { if await FolderBackup.pickFolder() != nil { folderLabel = FolderBackup.folderLabel() } }
+        // #1000a: on iOS the folder picker has reportedly refused to enable its Select button, leaving
+        // the user with only Cancel and NOOP silently doing nothing. We can't tell a deliberate Cancel
+        // apart from that dead-button dead-end (both come back nil), so when no folder arrives we show
+        // the screen's normal result alert with a concrete workaround instead of staying silent. Mildly
+        // chatty on a genuine Cancel; honest and actionable when the picker is actually broken.
+        Task {
+            if await FolderBackup.pickFolder() != nil {
+                folderLabel = FolderBackup.folderLabel()
+            } else {
+                alertTitle = String(localized: "No folder selected")
+                alertMessage = String(localized: "NOOP didn't get a folder back from the picker. If the Select button won't enable, try creating a fresh folder in Files (under On My iPhone or iCloud Drive) and choosing that instead.")
+                showAlert = true
+            }
+        }
         #endif
     }
 

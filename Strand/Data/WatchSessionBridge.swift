@@ -141,14 +141,18 @@ final class WatchSessionBridge: NSObject, ObservableObject {
         // valid when the anchor day IS the local today: early in a fresh day today's Rest row may not
         // exist yet, so we borrow the latest known value. For an anchor that is NOT today, borrowing the
         // tail would surface a DIFFERENT day's Rest as this day's without any cal marker (the cross-day
-        // bug), so we leave it nil and let restCalibrating flag it honestly. Mirrors TodayView's
-        // `restByDay[selectedDayKey] ?? (selectedDayOffset == 0 ? restSeries.last?.value : nil)`.
+        // bug), so we leave it nil and let restCalibrating flag it honestly. #977: the tail is ALSO gated on
+        // freshness now — a live 5.0 whose sleep never scores used to push a weeks-old Rest to the watch
+        // forever; a stale tail falls through to nil so the watch shows its honest calibrating state. Mirrors
+        // TodayView.freshRestScore.
         var restScore: Double?
         if let day {
             let restSeries = await model.repo.exploreSeries(key: "sleep_performance", source: model.deviceId)
             let restByDay = Dictionary(restSeries.map { ($0.day, $0.value) }, uniquingKeysWith: { _, last in last })
             let anchorIsToday = day.day == Repository.localDayKey(now)
-            restScore = restByDay[day.day] ?? (anchorIsToday ? restSeries.last?.value : nil)
+            restScore = TodayView.freshRestScore(
+                todayValue: restByDay[day.day], lastDay: restSeries.last?.day,
+                lastValue: restSeries.last?.value, isTodaySelected: anchorIsToday, todayKey: day.day)
         }
 
         // The honesty rule: a missing number that is genuinely mid-calibration is flagged so the watch

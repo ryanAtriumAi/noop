@@ -100,10 +100,27 @@ final class LiquidMotion {
         manager.startDeviceMotionUpdates(to: motionQueue) { [weak self] motion, _ in
             guard let self, let m = motion else { return }
             // roll ≈ side-to-side tilt of the phone held upright
-            let raw = max(-0.62, min(0.62, m.attitude.roll))
+            // #1004: scale the response by uprightness. `m.gravity` is the unit gravity vector in DEVICE
+            // coords, so -gravity.y = dot(world-up, screen-up): 1 held upright, ~0 flat on a table or lying
+            // down. Near flat, attitude roll is large-but-meaningless (the roll axis approaches the gravity
+            // axis), which used to pin the liquid sideways in bed; attenuated, it settles LEVEL instead.
+            let upright = LiquidMotion.uprightAttenuation(-m.gravity.y)
+            let raw = max(-0.62, min(0.62, m.attitude.roll)) * upright
             self.tilt += (raw - self.tilt) * 0.18   // light smoothing
         }
         #endif
+    }
+
+    /// #1004 — pure uprightness → tilt-response attenuation, mirrored bit-for-bit on Android
+    /// (LiquidMotion.kt `liquidUprightAttenuation`; golden vectors locked in LiquidUprightTest.kt).
+    /// `uprightness` = how aligned screen-up is with world-up, in [-1, 1]: 1 upright portrait, 0 flat /
+    /// landscape / lying sideways, -1 upside down. Smoothstep ramp over 0.25→0.65 so a normal handheld
+    /// posture (phone reclined toward the face) keeps the full slosh and the response fades smoothly to
+    /// level as the device approaches flat — no hard snap at a threshold. (The explicit follow-tilt on/off
+    /// toggle stays on the roadmap; this is the always-on physical fix for near-flat use.)
+    static func uprightAttenuation(_ uprightness: Double) -> Double {
+        let t = max(0, min(1, (uprightness - 0.25) / 0.40))
+        return t * t * (3 - 2 * t)
     }
 
     func release() {

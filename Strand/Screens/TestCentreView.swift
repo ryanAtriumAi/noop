@@ -167,7 +167,7 @@ struct TestCentreView: View {
                     // A generic "whole app" report: the master profile so the deep-link self-applies the
                     // test:all label. master is not in the registry (it is not a wear-and-capture mode), so
                     // build the lightweight mode inline.
-                    report.start(mode: TestCentreView.masterReportMode, live: live)
+                    report.start(mode: TestCentreView.masterReportMode, live: live, repo: model.repo)
                 }
                 Text("Builds a redacted .zip, shows you exactly what it contains, then opens a prefilled GitHub issue. You attach the file on the next screen.")
                     .font(StrandFont.caption).foregroundStyle(StrandPalette.textTertiary)
@@ -420,7 +420,7 @@ private struct TestModeRow: View {
             }
             HStack {
                 Spacer()
-                Button("Report") { report.start(mode: mode, live: live) }
+                Button("Report") { report.start(mode: mode, live: live, repo: model.repo) }
                     .buttonStyle(.plain).font(StrandFont.mono).foregroundStyle(StrandPalette.accent)
                     .accessibilityLabel("Report a \(mode.title) bug")
             }
@@ -514,10 +514,37 @@ private struct ConnectionReadoutPanel: View {
             : String(localized: "not connected")
         let reconnects = ConnectionReadout.reconnectCount(taggedTail: tail)
         let lastOffload = ConnectionReadout.lastOffloadResult(taggedTail: tail)
+        // #990: rows drained this session (the running/final offload tally) BESIDE the persisted all-time
+        // counter, so a strap stuck in a pull-restart loop still shows the install-lifetime progress the
+        // per-session number keeps resetting away.
+        let sessionRows = ConnectionReadout.sessionRows(taggedTail: tail)
+        let allTimeRows = TestCentre.cumulativeDrainedRows()
+        // #987: clock latch + frame liveness. The correlated device clock is parsed from the same log the
+        // export ships (pure ConnectionReadout parsers), the last-frame stamp off the non-published
+        // LiveState field FrameRouter writes.
+        let deviceClock = ConnectionReadout.clockCorrelatedDevice(logLines: live.log)
+        let rtcWarning = ConnectionReadout.rtcWarning(deviceClockUnix: deviceClock,
+                                                      strapNewestUnix: live.strapRange?.newestUnix)
         VStack(alignment: .leading, spacing: 4) {
             ReadoutRow(label: String(localized: "Connection uptime"), value: uptime)
             ReadoutRow(label: String(localized: "Reconnects this run"), value: String(reconnects))
             ReadoutRow(label: String(localized: "Last offload result"), value: lastOffload ?? String(localized: "no offload yet"))
+            ReadoutRow(label: String(localized: "Rows drained (session)"),
+                       value: sessionRows.map(String.init) ?? String(localized: "no offload yet"))
+            ReadoutRow(label: String(localized: "Rows drained (all time)"), value: String(allTimeRows))
+            ReadoutRow(label: String(localized: "Clock latched"),
+                       value: ConnectionReadout.clockLatchedLabel(deviceClockUnix: deviceClock))
+            ReadoutRow(label: String(localized: "Last frame"),
+                       value: ConnectionReadout.lastFrameLabel(lastFrameUnix: live.lastFrameAtUnix, nowUnix: now))
+            if let rtcWarning {
+                // #987: the plain-words 1970/71 warning - amber, not a bare token, because this is the
+                // single most common "no history" root cause and the fix is in the sentence.
+                Text(rtcWarning)
+                    .font(StrandFont.caption)
+                    .foregroundStyle(StrandPalette.statusWarning)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(rtcWarning)
+            }
         }
         .padding(.top, 2)
     }
@@ -656,6 +683,16 @@ private struct ReportReviewSheet: View {
         return ScreenScaffold(title: "Review before sharing",
                               subtitle: "This is exactly what your report will contain. Nothing leaves \(Platform.deviceNounPhrase) until you tap Share.") {
             VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
+                if report.pending?.modeInactive == true {
+                    // #1002: the selected profile's test mode is not on, so this bundle carries no capture
+                    // for the very thing being reported (the #812 capture_check only grades ACTIVE modes,
+                    // so without this the report just looked thin with no explanation). Warn plainly, with
+                    // the fix, BEFORE the user ships a report a maintainer can't act on.
+                    Text("Heads up: this test mode is off, so the report has no capture for it. For a useful report, turn the mode on, reproduce the problem while wearing the strap, then report again.")
+                        .font(StrandFont.caption)
+                        .foregroundStyle(StrandPalette.statusWarning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 NoopCard {
                     ScrollView {
                         Text(preview.isEmpty ? String(localized: "(nothing to share yet)") : preview)

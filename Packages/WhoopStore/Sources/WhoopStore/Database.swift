@@ -420,6 +420,32 @@ extension WhoopStore {
                 t.primaryKey(["deviceId", "ts"])
             }
         }
+
+        // v22 (Live Sessions): one row per silent-guardian coaching session. Natural key (deviceId, startTs).
+        // Records the recovery-gated band it guarded (floor/ceiling bpm) + today's Charge at start, the time
+        // split (in-band / below / above seconds), the two cue counts, and the HR source used, so the look-back
+        // summary + the streak read entirely from here. `endTs` is nullable while a session is in progress
+        // (a crash/kill leaves it open; the app closes it on next launch). All totals NOT NULL DEFAULT 0 so a
+        // zero-length session reads cleanly. Additive, NEW table only (no existing row touched), so an old
+        // reader is unaffected. See docs/superpowers/specs/2026-07-04-live-sessions-design.md. Twin of
+        // Android's MIGRATION_15_16.
+        migrator.registerMigration("v22-live-session") { db in
+            try db.create(table: "liveSession") { t in
+                t.column("deviceId", .text).notNull()
+                t.column("startTs", .integer).notNull()
+                t.column("endTs", .integer)
+                t.column("chargeAtStart", .double)
+                t.column("floorBpm", .double).notNull()
+                t.column("ceilingBpm", .double).notNull()
+                t.column("inBandSec", .double).notNull().defaults(to: 0)
+                t.column("belowSec", .double).notNull().defaults(to: 0)
+                t.column("aboveSec", .double).notNull().defaults(to: 0)
+                t.column("pushCount", .integer).notNull().defaults(to: 0)
+                t.column("easeCount", .integer).notNull().defaults(to: 0)
+                t.column("hrSource", .text).notNull()
+                t.primaryKey(["deviceId", "startTs"])
+            }
+        }
         return migrator
     }
 }

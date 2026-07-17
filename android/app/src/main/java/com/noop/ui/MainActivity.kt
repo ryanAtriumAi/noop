@@ -165,6 +165,8 @@ object NoopPrefs {
     /** Terms-of-use version the user last accepted. Empty until the first-run gate is accepted; a
      *  material terms change bumps [Terms.CURRENT_VERSION] and re-prompts. Mirrors macOS @AppStorage. */
     const val KEY_ACCEPTED_TERMS_VERSION = "noop.acceptedTermsVersion"
+    /** ISO-8601 timestamp of the last terms acceptance — the on-device consent record (version + when). */
+    const val KEY_ACCEPTED_TERMS_AT = "noop.acceptedTermsAt"
 
     /** "Keep connected in the background", drives [com.noop.ble.WhoopConnectionService]. Default on. */
     const val KEY_BACKGROUND_CONNECTION = "noop.backgroundConnection"
@@ -729,7 +731,10 @@ fun NoopRoot() {
     }
     if (acceptedTerms != Terms.CURRENT_VERSION) {
         TermsGateScreen(onAccept = {
-            prefs.edit().putString(NoopPrefs.KEY_ACCEPTED_TERMS_VERSION, Terms.CURRENT_VERSION).apply()
+            prefs.edit()
+                .putString(NoopPrefs.KEY_ACCEPTED_TERMS_VERSION, Terms.CURRENT_VERSION)
+                .putString(NoopPrefs.KEY_ACCEPTED_TERMS_AT, java.time.Instant.now().toString())
+                .apply()
             acceptedTerms = Terms.CURRENT_VERSION
         })
         return

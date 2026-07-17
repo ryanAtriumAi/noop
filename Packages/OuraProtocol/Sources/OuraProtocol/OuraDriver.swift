@@ -218,9 +218,14 @@ public final class OuraDriver {
     public func unixSeconds(forRingTimestamp rt: UInt32) -> Int? {
         guard let anchorUtcMs, let anchorRingTime else { return nil }
         let deltaTicks = Int64(rt) - Int64(anchorRingTime)
-        let ms = anchorUtcMs + deltaTicks * 100   // default 100 ms/tick (s5.5)
-        guard ms > 0 else { return nil }
-        return Int(ms / 1000)
+        let ms = anchorUtcMs + deltaTicks * 100   // default 100 ms/tick (s5.5); bounded input, no overflow
+        // #968: a corrupt/misaligned ring timestamp (seen on a full cursor=0 history dump) can convert to
+        // an implausible epoch. Gate the RESULT to the same 2020-2035 plausible window used for anchoring
+        // (was a weak `ms > 0`), so the caller honestly falls back to arrival time instead of banking a
+        // 1970 or far-future sample.
+        let seconds = ms / 1000
+        guard seconds >= Self.minPlausibleEpochSeconds, seconds <= Self.maxPlausibleEpochSeconds else { return nil }
+        return Int(seconds)
     }
 
     /// Bounds for a plausible anchor epoch (unix seconds): 2020-01-01 to 2035-01-01. A decoded 0x42/0x85
@@ -342,7 +347,14 @@ public final class OuraDriver {
         case .sleepSummary1, .sleepSummaryB, .sleepSummaryC, .sleepSummaryD, .sleepSummaryE, .sleepSummaryF:
             return [.tierB(OuraTierBSummary(tag: record.type, ringTimestamp: record.ringTimestamp,
                                             rawPayload: record.payload, kind: "sleep_summary"))]
-        case .activityInfo, .activitySummary1, .activitySummary2:
+        case .activityInfo:
+            // Split out of the raw-bytes .tierB wrapper: this ONE activity tag has a plausible decode
+            // formula (Decoders.decodeActivityInfo, third-party [oura-rs], PR #960 investigation). Still
+            // Tier B - only reached behind allowTierB (gated above), and OuraStreamMapping never folds
+            // .activityInfo into a durable stream. 0x51/0x52 summaries stay raw below.
+            guard let info = OuraDecoders.decodeActivityInfo(record) else { return [] }
+            return [.activityInfo(info)]
+        case .activitySummary1, .activitySummary2:
             return [.tierB(OuraTierBSummary(tag: record.type, ringTimestamp: record.ringTimestamp,
                                             rawPayload: record.payload, kind: "activity"))]
         case .realSteps1, .realSteps2:

@@ -306,6 +306,13 @@ struct Whoop5EmptyOffloadTracker {
 ///     burning battery; stop and let the periodic floor retry slowly.
 ///  4. `consecutiveCount < maxAutoContinues` — a hard per-connection cap so a pathological strap can't
 ///     pin the radio. Once hit, fall back to the 15-min floor.
+///
+/// #1012: a FUTURE-dated `strapNewestTs` (more than `futureSkewSeconds` past the wall clock, #928) not
+/// only nulls guard 2a — it also STOPS guard 2b. A future-clock strap banks future-dated records, so the
+/// rows it hands over are future-timestamped too and "real rows persisted" is no evidence of genuine
+/// backlog; 2b would chase the future-dated range through the whole cap (six back-to-back passes, each to
+/// its idle timeout — the reported ~15-min sync). The stale/PAST-epoch case 2b actually exists for (#451)
+/// reads BEHIND the frontier, never future-dated, so it is untouched.
 struct BackfillContinuation {
     /// Hard cap on consecutive auto-continues per connection (resets on disconnect). 6 × ~60s ≈ 6 min of
     /// back-to-back draining — enough to chew through a multi-night backlog far faster than the 15-min
@@ -320,6 +327,18 @@ struct BackfillContinuation {
     /// offloads on every connect. 48 h absorbs genuine timezone confusion and mild drift; nothing
     /// legitimate banks records two days ahead of the phone's clock.
     static let defaultFutureSkewSeconds = 48 * 3600
+
+    /// #1012: is the strap-reported "newest banked record" FUTURE-dated beyond the skew allowance — more
+    /// than `futureSkewSeconds` past the wall clock? The strap's clock is then almost certainly set in the
+    /// future (#928), so its range answer AND its freshly-persisted rows are untrustworthy as backlog
+    /// evidence. Pure, and shared between `shouldAutoContinue` (it gates 2a AND 2b) and the call site's
+    /// honest stop log so the two can never disagree on the reason. nil ⇒ false: an unanswered range is
+    /// UNKNOWN, not future-dated, and 2b's stale-epoch rescue (#451) still applies to it.
+    static func isFutureDatedNewest(_ strapNewestTs: Int?, wallNowUnix: Int,
+                                    futureSkewSeconds: Int = defaultFutureSkewSeconds) -> Bool {
+        guard let n = strapNewestTs else { return false }
+        return n > wallNowUnix + futureSkewSeconds
+    }
 
     /// `stillConnected`: link up + command channel usable. `strapNewestTs`: newest record the strap holds
     /// (GET_DATA_RANGE). `ourFrontierTs`: newest record WE'VE persisted (max HR ts). `wallNowUnix`: the
@@ -342,14 +361,23 @@ struct BackfillContinuation {
         guard lastTrimAdvanced else { return false }               // 3 (don't spin on a frozen cursor)
         // #928: a strap clock set in the FUTURE makes "newest" read ahead of ANY real frontier, so 2a
         // would report backlog forever and drive up to the full cap in EMPTY offloads on every connect.
-        // A newest more than futureSkewSeconds past the wall clock is implausible: exclude it (treat the
-        // range as unknown) so only demonstrated progress (2b, real rows) can continue the drain.
-        var plausibleNewest = strapNewestTs
-        if let n = plausibleNewest, n > wallNowUnix + futureSkewSeconds { plausibleNewest = nil }
+        // A newest more than futureSkewSeconds past the wall clock is implausible: exclude it from 2a.
+        let futureDated = isFutureDatedNewest(strapNewestTs, wallNowUnix: wallNowUnix,
+                                              futureSkewSeconds: futureSkewSeconds)
+        let plausibleNewest = futureDated ? nil : strapNewestTs
         // 2a: the strap reports newer data than we hold — reliable WHEN its clock epoch is sane.
         if let newest = plausibleNewest, let frontier = ourFrontierTs, (newest - frontier) > behindGapSeconds {
             return true
         }
+        // #1012: a future-dated newest also gates 2b, not just 2a. A strap whose clock is set ahead
+        // (#928) BANKED future-dated records, so the rows this session persisted are themselves
+        // future-timestamped — "real rows" is NOT evidence of genuine backlog there, and 2b used to
+        // chase the future-dated range through the whole cap (six back-to-back passes, each run to its
+        // idle timeout: the reported ~15-min sync). Stop after this single pass; the periodic floor
+        // keeps draining across connects, restoring the pre-#928 single-pass behaviour. The stale/
+        // PAST-epoch case 2b exists for (#451) reads BEHIND the frontier, never future-dated, so it
+        // falls through untouched below.
+        if futureDated { return false }
         // 2b (#451): GET_DATA_RANGE's "newest" can read a STALE / wrong-epoch value — a strap that was
         // fully discharged (or carries a previous owner's history) banks records across multiple clock
         // epochs, and the data-range "newest" can latch an OLD one (e.g. 2024 when the real newest is 2026).
@@ -1746,14 +1774,27 @@ public final class BLEManager: NSObject, ObservableObject {
         let count = consecutiveAutoContinues
         Task { @MainActor in
             let frontier = await collector?.latestHRSampleTs() ?? nil
+            let wallNow = Int(Date().timeIntervalSince1970)   // #928: real wall clock, at decision time
+            let stillConnected = state.connected && state.bonded
             guard BackfillContinuation.shouldAutoContinue(
-                stillConnected: state.connected && state.bonded,
+                stillConnected: stillConnected,
                 strapNewestTs: newest,
                 ourFrontierTs: frontier,
-                wallNowUnix: Int(Date().timeIntervalSince1970),   // #928: real wall clock, at decision time
+                wallNowUnix: wallNow,
                 rowsPersistedThisSession: rowsPersisted,
                 lastTrimAdvanced: trimAdvanced,
                 consecutiveCount: count) else {
+                // #1012: name the stop honestly when the future-clock gate is what ended the chain —
+                // without this line the log just goes quiet after one pass and a strap-log export can't
+                // tell "caught up" from "future-dated range refused". Fires ONLY when 2b would otherwise
+                // have continued (still connected, rows banked, trim advanced, under the cap), so a
+                // frozen-trim / cap / disconnect stop is never misattributed to the clock.
+                if stillConnected, rowsPersisted > 0, trimAdvanced,
+                   count < BackfillContinuation.defaultMaxAutoContinues,
+                   BackfillContinuation.isFutureDatedNewest(newest, wallNowUnix: wallNow) {
+                    let aheadH = ((newest ?? wallNow) - wallNow) / 3600
+                    log("Backfill: not auto-continuing (#1012) - the strap-reported newest banked record reads \(aheadH)h AHEAD of the wall clock, so the range is future-dated and the strap clock is likely wrong (#928). Stopping after one pass instead of chasing future-dated ranges; the periodic sync keeps draining across connects.")
+                }
                 // No re-kick. THIS is the real "we're done draining" signal (#25): clear the auto-continue
                 // streak so the NEXT deep backlog (e.g. after the app's been off again) gets a fresh budget
                 // of re-kicks. Reset here — NOT unconditionally on every HISTORY_COMPLETE — so a strap that

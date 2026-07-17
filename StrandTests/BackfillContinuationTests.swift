@@ -11,6 +11,8 @@ import XCTest
 /// #928 pinned here too: the predicate takes the REAL wall clock (`wallNowUnix`) so a strap clock set in
 /// the FUTURE (a "newest" more than 48 h ahead of the wall) is excluded from the backlog test instead of
 /// reading as endless backlog. Fixtures pass an explicit wall-now consistent with their timestamps.
+/// #1012 tightens it: a future-dated newest now stops guard 2b as well — its "real rows" are future-dated
+/// too, so the drain ends after one pass instead of chasing the future range through the whole cap.
 final class BackfillContinuationTests: XCTestCase {
 
     /// The fixtures' "now": all pre-#928 timestamps sit at or before this instant, so the plausibility
@@ -308,18 +310,49 @@ final class BackfillContinuationTests: XCTestCase {
             consecutiveCount: 0))
     }
 
-    /// #928 + #451 symmetry: a future-dated range answer is unreliable, but REAL rows persisting this
-    /// session are direct evidence of backlog, so the 2b evidence path still continues the drain (the
-    /// exclusion only removes the untrustworthy 2a shortcut, it never blocks demonstrated progress).
-    func testFutureClockNewestStillContinuesOnRealRows() {
-        XCTAssertTrue(BackfillContinuation.shouldAutoContinue(
+    /// #1012 (FLIPS the original #928-era assertion, which had this continuing): a FUTURE-dated range
+    /// answer means the strap BANKED future-dated records (#928), so the rows this session persisted are
+    /// themselves future-timestamped — NOT evidence of genuine backlog. Under the old "real rows keep
+    /// draining" logic, 2b chased the future-dated range through the whole 6-kick cap, each pass run to
+    /// its idle timeout: a ~1-min sync took ~15. Stop after the single pass; the periodic floor keeps
+    /// draining across connects. (The stale/PAST-epoch case 2b exists for is pinned separately by
+    /// testContinuesWhenNewestStaleButRowsFlowing and stays continuing.)
+    func testFutureClockNewestStopsEvenOnRealRows() {
+        XCTAssertFalse(BackfillContinuation.shouldAutoContinue(
             stillConnected: true,
-            strapNewestTs: wallNow + 30 * 86_400,     // same future-dated answer
+            strapNewestTs: wallNow + 30 * 86_400,     // future-dated answer (strap clock a month ahead)
             ourFrontierTs: wallNow - 600,
             wallNowUnix: wallNow,
-            rowsPersistedThisSession: 240,            // but this pass banked real records
+            rowsPersistedThisSession: 240,            // rows banked — but they're future-dated too
             lastTrimAdvanced: true,
             consecutiveCount: 0))
+    }
+
+    /// #1012 the reported burn, end to end: a future-clock strap kept handing over rows pass after pass
+    /// (18497, 850, 13212, 1729, 92676 in the reporter's log), so the old 2b chained through the whole
+    /// cap. The gated predicate must refuse the SECOND pass no matter how many rows keep flowing — the
+    /// chain length is exactly one (the pass that already ran before the decision).
+    func testFutureClockChainStopsAfterOnePass() {
+        for rows in [18_497, 850, 13_212, 1_729, 92_676] {
+            XCTAssertFalse(BackfillContinuation.shouldAutoContinue(
+                stillConnected: true,
+                strapNewestTs: wallNow + 158 * 86_400,   // ~158 days ahead, the reporter's strap
+                ourFrontierTs: wallNow - 600,
+                wallNowUnix: wallNow,
+                rowsPersistedThisSession: rows,
+                lastTrimAdvanced: true,
+                consecutiveCount: 0),
+                "a future-dated range must never re-kick, even with \(rows) rows persisted")
+        }
+    }
+
+    /// #1012 helper: the future-dated discriminator shared by the predicate and the call-site stop log.
+    /// nil = unknown range (NOT future-dated — the #451 stale-epoch rescue still applies); exactly 48 h
+    /// ahead is plausible skew (strictly-greater trips it); one second past is future-dated.
+    func testIsFutureDatedNewestBoundary() {
+        XCTAssertFalse(BackfillContinuation.isFutureDatedNewest(nil, wallNowUnix: wallNow))
+        XCTAssertFalse(BackfillContinuation.isFutureDatedNewest(wallNow + 48 * 3600, wallNowUnix: wallNow))
+        XCTAssertTrue(BackfillContinuation.isFutureDatedNewest(wallNow + 48 * 3600 + 1, wallNowUnix: wallNow))
     }
 
     /// #928 boundary: exactly 48 h ahead is still plausible (the guard is strictly-greater, absorbing

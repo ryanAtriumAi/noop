@@ -225,6 +225,11 @@ class OuraLiveSource(
     private var loggedFirstSpo2 = false
     /** Logs the FIRST ring-time -> UTC anchor of this session only (s5.5); reset on stop/disconnect. */
     private var loggedAnchor = false
+    /** Tier-B (UNVERIFIED) kinds ("activity" / "real_steps" / "sleep_summary" / "spo2_smoothed") already
+     *  logged this session, so a repeated tag logs once per KIND, not once per record. INVESTIGATION
+     *  ONLY (see the `allowTierB = true` comment at driver construction) - the log is how we collect raw
+     *  captures to validate these layouts; nothing here ever persists or scores. Reset on stop/disconnect. */
+    private val loggedTierBKinds = mutableSetOf<String>()
 
     // MARK: - Auto-reconnect (#912)
 
@@ -508,7 +513,13 @@ class OuraLiveSource(
         // every connection), and a key provisioned since the last attempt is picked up here. allowKeyInstall
         // is wired straight from the connection's adoptIntent so the dangerous 0x24 write is reachable ONLY
         // under an explicit adopt consent (OURA_PROTOCOL.md s3.2).
-        driver = OuraDriver(ringGen = ringGen, authKey = authKey(), allowKeyInstall = adoptIntent)
+        // allowTierB = true - INVESTIGATION ONLY (activity/real_steps/sleep-summary/smoothed-SpO2 tags,
+        // OURA_PROTOCOL.md s7.3 Tier B, UNVERIFIED layouts; PR #960). This lets `emit` LOG what the ring
+        // actually sends (raw bytes per kind, decoded MET for 0x50) so the layouts can be validated
+        // against real captures. It can never leak a value into scoring: OuraStreamMapping drops
+        // TierB/ActivityInfo unconditionally - the Tier-discipline gate that matters lives there, not here.
+        driver = OuraDriver(ringGen = ringGen, authKey = authKey(), allowTierB = true,
+                            allowKeyInstall = adoptIntent)
         reassembler.reset()
         pendingInstallKey = null       // a new connection starts with no install in flight
         _adoptPhase.value = AdoptPhase.Idle   // a stale outcome must never drive the wizard's transition
@@ -517,6 +528,7 @@ class OuraLiveSource(
         loggedFirstTemp = false
         loggedFirstSpo2 = false
         loggedAnchor = false
+        loggedTierBKinds.clear()
         pendingAnchorEvents.clear()
         // Resume the GetEvents cursor from where the LAST connection to this ring left off (s5.1/5.3), so a
         // routine reconnect doesn't re-fetch the ring's entire banked history every time.
@@ -565,6 +577,7 @@ class OuraLiveSource(
         loggedFirstTemp = false
         loggedFirstSpo2 = false
         loggedAnchor = false
+        loggedTierBKinds.clear()
         reachedStreaming = false
         // A stop MID-install is an honest failure (no ack will come); a stop after streaming leaves the
         // completed Streaming outcome intact so the wizard's success transition is not undone.
@@ -692,6 +705,7 @@ class OuraLiveSource(
                     loggedFirstTemp = false
                     loggedFirstSpo2 = false
                     loggedAnchor = false
+                    loggedTierBKinds.clear()
                     reachedStreaming = false
                     // A disconnect MID-install is an honest failure (no 0x25 ack will arrive); a disconnect
                     // after streaming leaves the completed Streaming outcome intact. Drop any in-flight key
@@ -1018,8 +1032,9 @@ class OuraLiveSource(
      * their REAL ring-time-anchored UTC (s5.5) so last night's data is never mis-recorded as happening
      * right now; when no anchor has arrived yet this session, the event is PARKED
      * ([pendingAnchorEvents]) until one does, rather than immediately guessing wall-clock. A 0x42
-     * time-sync (the anchor) drains anything parked. Tier-B never reaches here (the driver drops it unless
-     * allowTierB).
+     * time-sync (the anchor) drains anything parked. Tier-B events (allowed for INVESTIGATION - see the
+     * driver construction comment) are LOGGED only, never enqueued: OuraStreamMapping drops them anyway,
+     * so an unverified layout can never feed a durable stream or scoring.
      */
     private fun emit(events: List<OuraEvent>) = guardedCallback("emit") {
         if (events.isEmpty()) return@guardedCallback
@@ -1074,7 +1089,26 @@ class OuraLiveSource(
                 // Anything parked while unanchored gets its real time retroactively the moment it lands.
                 drainPendingAnchorEvents()
             }
-            // Motion / state / rtcBeacon / debugText / tierB: not a durable Streams row (see OuraStreamMapping).
+            is OuraEvent.TierB -> {
+                // INVESTIGATION ONLY (real_steps / activity-summary / sleep-summary / smoothed-SpO2,
+                // OURA_PROTOCOL.md s7.3 Tier B; PR #960). Logged ONCE PER KIND with the raw bytes so we
+                // can see whether the ring sends these tags at all and collect capture material - e.g.
+                // real_steps 0x7E/0x7F is server-flag-gated OFF by default ([open_oura-feat]), so its
+                // continued absence here is the ring's doing, not a decode gap. Never persisted, never
+                // scored (OuraStreamMapping drops TierB unconditionally regardless of this log).
+                if (loggedTierBKinds.add(e.value.kind)) {
+                    val hex = e.value.rawPayload.joinToString(" ") { "%02x".format(it) }
+                    log("Oura: Tier-B ${e.value.kind} seen (tag 0x${e.value.tag.toString(16)}) - raw: $hex")
+                }
+            }
+            is OuraEvent.ActivityInfo ->
+                // INVESTIGATION ONLY (0x50 activity/MET, Tier B - a plausible third-party formula, NOT
+                // ground-truth-validated; see OuraActivityInfo). Logged with the DECODED state/MET values
+                // every time (not once-per-kind): this is the tag under active plausibility evaluation, so
+                // every real capture is evidence. Never persisted, never scored, and NEVER converted into
+                // steps (MET is not a step count; OuraStreamMapping drops ActivityInfo unconditionally).
+                log("Oura: activity (Tier-B) state=${e.value.state} met=${e.value.met}")
+            // Motion / state / rtcBeacon / debugText: not a durable Streams row (see OuraStreamMapping).
             else -> Unit
         }
     }

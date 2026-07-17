@@ -1,5 +1,6 @@
 import SwiftUI
 import StrandDesign
+import StrandAnalytics   // ConnectionReadout - the #987 clock-latch / RTC-epoch readout parsers
 import WhoopStore
 import OuraProtocol
 
@@ -61,6 +62,23 @@ private struct DevicesContent: View {
     private var activeDevices: [PairedDevice] { registry.devices.filter { $0.status != .archived } }
     private var removedDevices: [PairedDevice] { registry.devices.filter { $0.status == .archived } }
 
+    /// #987: the active+connected strap's clock state, from the SAME pure ConnectionReadout parsers the
+    /// Test Centre Connection panel binds (one source of truth). nil (no row at all) until the WHOOP path
+    /// has produced any clock signal - a routed frame, a clock correlation, or a data-range reply - so a
+    /// generic HR strap or an idle card never shows a fabricated "waiting" state. One computation for
+    /// both the line and the warning (the log scan is the cost worth paying once, not twice).
+    private var strapClockState: (line: String, warning: String?)? {
+        guard live.connected else { return nil }
+        let deviceClock = ConnectionReadout.clockCorrelatedDevice(logLines: live.log)
+        guard deviceClock != nil || live.strapRange != nil || live.lastFrameAtUnix != nil else { return nil }
+        let latched = ConnectionReadout.clockLatchedLabel(deviceClockUnix: deviceClock)
+        let frame = ConnectionReadout.lastFrameLabel(lastFrameUnix: live.lastFrameAtUnix,
+                                                     nowUnix: Int(Date().timeIntervalSince1970))
+        let warning = ConnectionReadout.rtcWarning(deviceClockUnix: deviceClock,
+                                                   strapNewestUnix: live.strapRange?.newestUnix)
+        return (String(localized: "Clock latched: \(latched) · last frame \(frame)"), warning)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: NoopMetrics.sectionSpacing) {
             // UPPERCASE overline section header, matching the liquid Today. Counts the paired bands so the
@@ -79,6 +97,9 @@ private struct DevicesContent: View {
                     // Firmware version belongs to the active + connected strap only; nil otherwise (and
                     // for a non-WHOOP source that never reports one).
                     liveFirmware: (device.status == .active && live.connected) ? live.strapFirmware : nil,
+                    // #987: clock latch + frame freshness + the 1970/71 RTC warning, active card only.
+                    liveClockLine: device.status == .active ? strapClockState?.line : nil,
+                    liveClockWarning: device.status == .active ? strapClockState?.warning : nil,
                     onMakeActive: { switchTarget = device },
                     onRename: { renameDraft = device.nickname ?? device.displayName; renameTarget = device },
                     onRemove: { removeTarget = device })
@@ -260,6 +281,13 @@ private struct DeviceCard: View {
     /// The active+connected strap's firmware version (from the connect handshake). nil when not the
     /// active/connected device, or for a source that reports no firmware (e.g. a non-WHOOP strap).
     var liveFirmware: String? = nil
+    /// #987: the active+connected strap's clock-state line ("Clock latched: yes · last frame 12s ago"),
+    /// nil for every other card. Built by the parent off the same pure ConnectionReadout parsers the
+    /// Test Centre Connection panel binds, so the two readouts can never disagree.
+    var liveClockLine: String? = nil
+    /// #987: the plain-words warning when the strap RTC reads ~1970/71 (never set, so it banks no
+    /// history) - the single most common "no history" root cause, surfaced where the user looks first.
+    var liveClockWarning: String? = nil
     var dimmed: Bool = false
     var onMakeActive: () -> Void
     var onRename: () -> Void
@@ -323,6 +351,23 @@ private struct DeviceCard: View {
                 // charge — same surface for WHOOP / strap / FTMS. The tube reads the charge band's colour.
                 if let pct = liveBatteryPct {
                     batteryTube(pct)
+                }
+
+                // #987: strap clock state for the active+connected strap - "clock latched" + frame
+                // freshness, with the plain amber 1970/71 warning when the RTC was never set (the strap
+                // banks no history in that state, which otherwise looks like a NOOP sync bug).
+                if let clockLine = liveClockLine {
+                    Text(clockLine)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.textTertiary)
+                        .accessibilityLabel(clockLine)
+                }
+                if let warning = liveClockWarning {
+                    Text(warning)
+                        .font(StrandFont.footnote)
+                        .foregroundStyle(StrandPalette.statusWarning)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(warning)
                 }
 
                 HStack(spacing: 6) {

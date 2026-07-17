@@ -394,6 +394,16 @@ object IntelligenceEngine {
             nowLocalMidnight - maxDays * SECONDS_PER_DAY - 30 * 3_600L, nowSeconds, tzOffsetSeconds,
         )
 
+        // #970 read efficiency, skin-temp leg: [RegistryDayOwnerSource.skinTempFamily] resolves the family
+        // via registry.all() — a Room query — and the loop below wants it once per DAY, so a 21-day scan
+        // re-read the paired-devices table ~21× for what is almost always ONE owner. Swift never paid this:
+        // it resolves the family from the in-memory regDevices snapshot loaded once per run
+        // (skinTempFamily(forOwner:devices:)). Memoise per owner across the scan so the DB read happens once
+        // per DISTINCT owner (once total on the common single-WHOOP install). A pure read-through — the
+        // registry is stable for the run (same assumption [candidatePriorities] above already makes), so
+        // every day sees the exact value the per-day call would have returned: byte-identical scoring.
+        val skinFamilyByOwner = HashMap<String, DeviceFamily>()
+
         for (offset in 0 until maxDays) {
             val dayStart = nowLocalMidnight - offset * SECONDS_PER_DAY
             val day = AnalyticsEngine.dayString(dayStart, tzOffsetSeconds)
@@ -432,7 +442,10 @@ object IntelligenceEngine {
             // register on the right scale (5/MG banks centidegrees, a WHOOP 4.0 v24 banks a raw ADC). The
             // owner source resolves it from the registry; unknown/non-WHOOP owners fall back to WHOOP5 (the
             // prior /100 behaviour), so only a device positively identified as a 4.0 changes scale.
-            val skinFamily = ownerSource?.skinTempFamily(owner) ?: DeviceFamily.WHOOP5
+            // Resolved once per DISTINCT owner via [skinFamilyByOwner] (#970 read efficiency, see above).
+            val skinFamily = skinFamilyByOwner.getOrPut(owner) {
+                ownerSource?.skinTempFamily(owner) ?: DeviceFamily.WHOOP5
+            }
             // Wrist-wear events in the night window, paired into off-wrist [start, end) intervals for the
             // off-wrist sleep backstop (#500). The HR-gap proxy in the stager is the always-on guard;
             // these explicit intervals sharpen it under the FRACTIONAL rule (#504) , a session is dropped
@@ -1415,6 +1428,18 @@ object IntelligenceEngine {
         // A locked override wins outright and skips the presence checks entirely.
         ownerSource.lockedOwner(day)?.let { return it }
         if (candidatePriorities.isEmpty()) return importedDeviceId
+        // #970: on the default single-WHOOP install the registry holds exactly ONE live candidate and it
+        // IS the fallback id, so the owner is a foregone conclusion — with data the resolver returns the
+        // candidate's own id; with none it returns null and the caller's fallback applies; both are
+        // [importedDeviceId] here. Skip the per-candidate LIMIT-1 HR probe in that case: this function
+        // runs once per scanned day, so the probe cost ~maxDays tiny reads per analyzeRecent for a
+        // question with one possible answer. Deliberately gated on `== importedDeviceId`, NOT just
+        // size == 1: a lone IMPORT candidate under a DIFFERENT id is not equivalent (its no-data day must
+        // fall back to [importedDeviceId], not resolve to its own id), so it still takes the probe path.
+        // Byte-identical to the loop below. Mirrors the Swift IntelligenceEngine.resolveDayOwner #970 fix.
+        if (candidatePriorities.size == 1 && candidatePriorities.first().first == importedDeviceId) {
+            return importedDeviceId
+        }
         val candidates = candidatePriorities.map { (id, priority) ->
             // Cheap presence check: a single HR row for this device in the night window marks it a
             // candidate. (LIMIT 1 , not the full pull the caller does once an owner is chosen.)

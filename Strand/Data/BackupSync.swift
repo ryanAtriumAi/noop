@@ -271,9 +271,12 @@ enum FolderBackup {
     }
     #else
     /// Present a folder picker (`UIDocumentPicker`) and persist the bookmark. Returns the chosen URL.
+    /// Starts in the previously-chosen folder when one resolves (else the picker falls back to our
+    /// Documents) — part of the #1000a "Select button never enables" mitigation; see
+    /// `DocumentPicker.pickFolder`.
     @MainActor
     static func pickFolder() async -> URL? {
-        let url = await DocumentPicker.pickFolder()
+        let url = await DocumentPicker.pickFolder(startingAt: resolveFolder())
         if let url { saveFolder(url) }
         return url
     }

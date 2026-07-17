@@ -159,6 +159,47 @@ public enum AnalyticsEngine {
         dayString(ts + offsetSec)
     }
 
+    /// UTC-midnight epoch seconds of an ISO `day` key (yyyy-MM-dd). `isoDay` is a FIXED-UTC formatter,
+    /// so `dayString(ts, offsetSec:) == day` ⇔ `(ts + offsetSec) ∈ [dayStartUtcSeconds(day), +86400)` —
+    /// an integer range check that replaces the per-sample DateFormatter the full-day stream filters in
+    /// `analyzeDay` used to run (~170k formatter invocations per scored day, ×maxDays, every pass; #996,
+    /// found by ryanbr's Kotlin↔Swift diff review). A malformed `day` falls back to 0 — an empty 1970
+    /// window no real sample matches — rather than trapping. Unreachable in practice (`day` always comes
+    /// from `dayString`), and the Kotlin mirror degrades the SAME way (`runCatching { … }.getOrDefault(0)`)
+    /// instead of throwing, so a single bad day key can never take down a whole scoring pass on either
+    /// platform (nil-tolerant over fail-fast, per the #996 review).
+    static func dayStartUtcSeconds(_ day: String) -> Int {
+        Int(isoDay.date(from: day)?.timeIntervalSince1970 ?? 0)
+    }
+
+    /// Skip the redundant calendar-day re-read in analyzeRecent's per-day scan (#997, ryanbr). For a
+    /// PAST day the night window `[nightLo, nightHi]` reads through to the NEXT local midnight, so the
+    /// calendar day `[dayLo, dayHi]` is a strict SUBSET of the hr/steps/gravity streams already in
+    /// memory — the dayHr/daySteps/dayGravity re-reads (~60 per pass, including the big ~86k-row HR
+    /// ones) re-query rows the caller already holds. When the day span is a NON-truncated subset of the
+    /// night window, return the day's samples by filtering the night list in memory; return nil when
+    /// the shortcut is unsafe and the caller must read the store directly:
+    ///   - TODAY: its calendar day runs past the 18 h night cap (`dayHi > nightHi`).
+    ///   - a night read that came back at `limit` rows may be truncated INSIDE the day span
+    ///     (`ORDER BY ts ASC LIMIT` drops the LATE rows — exactly where the day sits).
+    /// Byte-identical to the direct read: same owner (the caller reads both windows from one device),
+    /// same INCLUSIVE `[dayLo, dayHi]` bounds (matching the store's `ts >= from AND ts <= to` range),
+    /// same order (the night list came from the SAME ts-ASC store method, and filtering preserves
+    /// order), and the store's HR coalesce (measured ∪ v26 PPG, #156) dedups on a range-INDEPENDENT
+    /// `h.ts = p.ts` anti-join, so coalescing-then-filtering equals coalescing over the day range. The
+    /// guards are self-protecting — a DST-shifted `dayLo`/`dayHi` simply falls outside the window and
+    /// declines — so the shortcut can only ever DECLINE to a direct read, never return wrong data.
+    /// Mirrors Kotlin `IntelligenceEngine.daySliceFromNight`; lives here (like `offWristIntervals`)
+    /// so the pure logic is package-testable. (#997)
+    public static func daySliceFromNight<T>(_ night: [T],
+                                            nightLo: Int, nightHi: Int,
+                                            dayLo: Int, dayHi: Int,
+                                            limit: Int = 200_000,
+                                            ts: (T) -> Int) -> [T]? {
+        guard dayLo >= nightLo, dayHi <= nightHi, night.count < limit else { return nil }
+        return night.filter { ts($0) >= dayLo && ts($0) <= dayHi }
+    }
+
     /// JSON-encode stage segments to the verbatim array shape CachedSleepSession stores.
     /// `.sortedKeys` makes the output deterministic — JSONEncoder otherwise emits object keys in an
     /// unstable order (it can vary call to call), which would make stored stage JSON non-reproducible
@@ -280,6 +321,16 @@ public enum AnalyticsEngine {
                                   // are forwarded line-by-line. Side-effect-only; never alters the DayResult.
                                   traceSink: ((String) -> Void)? = nil) -> DayResult {
 
+        // Precompute the day's UTC bounds ONCE (#996). `dayString(ts, offsetSec:)` formats the UTC
+        // calendar day of (ts + offset) with a FIXED offset, so "== day" is exactly membership in
+        // [dayStartUtc, +86400). That turns the day-bucketing filters below — otherwise a per-sample
+        // DateFormatter over the full-day dayHr/daySteps streams (~86k 1 Hz samples each) once per
+        // analyzeDay, ×maxDays every pass — into an integer range check. Byte-identical to the
+        // formatter compare (locked by AnalyticsEngineDayBoundsTests, incl. fractional offsets).
+        let dayStartUtc = dayStartUtcSeconds(day)
+        let dayEndUtc = dayStartUtc + 86_400
+        func tsInDay(_ ts: Int) -> Bool { (ts + tzOffsetSeconds) >= dayStartUtc && (ts + tzOffsetSeconds) < dayEndUtc }
+
         // ── Sleep detection + staging ─────────────────────────────────────────
         let allSessions = SleepStager.detectSleep(hr: hr, rr: rr, resp: resp, gravity: gravity,
                                                   tzOffsetSeconds: tzOffsetSeconds, wristOff: wristOff,
@@ -288,7 +339,7 @@ public enum AnalyticsEngine {
                                                   traceSink: traceSink)
         // Sessions attributed to `day` = those whose end falls on `day` (LOCAL day, #277). `day` is
         // the caller's local-day key; attribute by the same offset so the bucket and the key agree.
-        let matched = allSessions.filter { dayString($0.end, offsetSec: tzOffsetSeconds) == day }
+        let matched = allSessions.filter { tsInDay($0.end) }
 
         // ── The day's MAIN night (#525) ───────────────────────────────────────
         // A day can hold an overnight AND a daytime nap (both end on `day`, so both are in `matched`).
@@ -496,7 +547,7 @@ public enum AnalyticsEngine {
         let stepsTotal: Int? = {
             // Prefer the full-calendar-day stream for the additive total; fall back to the
             // night-window stream when the caller didn't supply one (pure-function callers/tests).
-            let sorted = (daySteps ?? steps).filter { dayString($0.ts, offsetSec: tzOffsetSeconds) == day }.sorted { $0.ts < $1.ts }
+            let sorted = (daySteps ?? steps).filter { tsInDay($0.ts) }.sorted { $0.ts < $1.ts }
             if sorted.count < 2 { return nil }
             // A delta this large is a big time-gap / disconnect boundary between sync sessions (or a
             // firmware reboot, byte-indistinguishable from a wrap), NOT real steps — drop it so gaps
@@ -527,7 +578,7 @@ public enum AnalyticsEngine {
         // (dayString(ts, tzOffset)) so it agrees with the bucket (#277). Fall back to the
         // night-window hr for pure-function callers that don't supply dayHr. Strain keeps the full
         // window (bounded log).
-        let dayHrFiltered = (dayHr ?? hr).filter { dayString($0.ts, offsetSec: tzOffsetSeconds) == day }
+        let dayHrFiltered = (dayHr ?? hr).filter { tsInDay($0.ts) }
         let activeKcalEst: Double? = dayHrFiltered.isEmpty ? nil : Calories.estimateDayCalories(
             dayHrFiltered, profile: profile, hrmax: effMaxHR,
             restingHR: restingHRDaily.map(Double.init))

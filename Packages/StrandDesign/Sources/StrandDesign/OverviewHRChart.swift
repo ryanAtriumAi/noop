@@ -62,6 +62,10 @@ public struct OverviewHRChart: View {
     public var xRange: ClosedRange<Date>?
     public var height: CGFloat
     public var showsHover: Bool
+    /// iPhone touch scrub (#979 spin-off): when true, touch-and-hold pins the hover crosshair under the
+    /// finger and dragging scrubs it — driving the SAME readout layer the Mac pointer hover uses. Off by
+    /// default so every existing call site keeps its exact touch behaviour; the Deep Timeline opts in.
+    public var touchScrub: Bool
     public var valueFormat: (Double) -> String
     public var dateFormat: (Date) -> String
 
@@ -88,6 +92,7 @@ public struct OverviewHRChart: View {
         xRange: ClosedRange<Date>? = nil,
         height: CGFloat = 220,
         showsHover: Bool = true,
+        touchScrub: Bool = false,
         workoutTint: Color = StrandPalette.strain033,
         zoomDomain: Binding<ClosedRange<Date>?> = .constant(nil),
         zoomBounds: ClosedRange<Date>? = nil,
@@ -105,6 +110,7 @@ public struct OverviewHRChart: View {
         self.xRange = xRange
         self.height = height
         self.showsHover = showsHover
+        self.touchScrub = touchScrub
         self.workoutTint = workoutTint
         self._zoomDomain = zoomDomain
         self.zoomBounds = zoomBounds
@@ -127,6 +133,11 @@ public struct OverviewHRChart: View {
     /// The zoom window captured at the start of a magnify/drag gesture, so the gesture is applied
     /// against a stable anchor instead of compounding each frame.
     @State private var gestureAnchorDomain: ClosedRange<Date>? = nil
+    #if os(iOS)
+    /// True while a touch scrub is engaged (the hold completed). Only used to fire the engage haptic
+    /// exactly once per scrub — the sequenced gesture can report `.second(true, nil)` more than once.
+    @State private var scrubEngaged = false
+    #endif
 
     /// PERF: the 24h HR line can carry hundreds of samples — more than the ~360pt plot has pixels, so most
     /// are sub-pixel pure draw cost. This is the point set actually handed to the line/area marks:
@@ -163,6 +174,26 @@ public struct OverviewHRChart: View {
         }
         newLo = max(newLo, bounds.lowerBound.timeIntervalSince1970)
         return Date(timeIntervalSince1970: newLo)...Date(timeIntervalSince1970: max(newLo + 1, newHi))
+    }
+
+    // MARK: Annotation scoping (pure, testable in isolation)
+
+    /// The single sleep to band for a visible window: the LONGEST candidate overlapping it — the main
+    /// night, never an afternoon nap — the same pick the classic Today makes for its whole-day HR chart.
+    /// Extracted pure so the Deep Timeline's annotation parity (#979 spin-off) is headless-testable.
+    /// Overlap is half-open-ish like Today's filter: a sleep ending exactly at the window start (or
+    /// starting exactly at its end) does NOT count — it contributes zero visible band.
+    public static func mainSleep(_ candidates: [SleepSpan], overlapping window: ClosedRange<Date>) -> SleepSpan? {
+        candidates
+            .filter { $0.end > window.lowerBound && $0.start < window.upperBound }
+            .max(by: { $0.end.timeIntervalSince($0.start) < $1.end.timeIntervalSince($1.start) })
+    }
+
+    /// The workout spans overlapping a visible window (a glyph for an out-of-window workout would be
+    /// clamp-dragged to the plot edge and lie about its time). Edge-touching spans are kept — mirrors
+    /// the classic Today's inclusive workout filter. Order preserved. Pure.
+    public static func workouts(_ candidates: [WorkoutSpan], overlapping window: ClosedRange<Date>) -> [WorkoutSpan] {
+        candidates.filter { $0.end >= window.lowerBound && $0.start <= window.upperBound }
     }
 
     /// The visible domain after panning `base` by `deltaSeconds`, clamped into `bounds` (span preserved). Pure.
@@ -352,6 +383,38 @@ public struct OverviewHRChart: View {
         }
     }
 
+    #if os(iOS)
+    /// Touch-and-hold-then-drag scrub (#979 spin-off). The stationary hold (0.25 s within 8 pt) is the
+    /// gate that separates scrubbing from the pan drag (min 6 pt) and pinch that own immediate movement.
+    /// LongPressGesture reports no location, so the crosshair appears from the drag phase's coordinates —
+    /// in practice the first micro-movement of a held finger, which is immediate; the engage haptic marks
+    /// the mode switch the instant the hold lands. Drives the SAME `hoverX` the Mac pointer hover drives,
+    /// so the readout (crosshair + dot + tooltip) is byte-identical across input methods.
+    private var touchScrubGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.25, maximumDistance: 8)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+            .onChanged { value in
+                guard case .second(true, let drag) = value else { return }
+                if !scrubEngaged {
+                    scrubEngaged = true
+                    StrandHaptic.selection.play()
+                }
+                if let drag {
+                    // Non-animating transaction, same reason as hover (TrendChart #104 flicker).
+                    var tx = Transaction()
+                    tx.disablesAnimations = true
+                    withTransaction(tx) { hoverX = drag.location.x }
+                }
+            }
+            .onEnded { _ in
+                scrubEngaged = false
+                var tx = Transaction()
+                tx.disablesAnimations = true
+                withTransaction(tx) { hoverX = nil }
+            }
+    }
+    #endif
+
     // MARK: Body
 
     public var body: some View {
@@ -397,6 +460,16 @@ public struct OverviewHRChart: View {
                         }
                     }
                 }
+                #if os(iOS)
+                // #979 spin-off — touch scrub. onContinuousHover above is pointer-only, so on iPhone the
+                // crosshair readout was unreachable (the collapsed a11y summary was the only datum
+                // affordance; cf. CompareView's touch-scrub note). Touch-and-hold claims the touch for
+                // scrubbing, then dragging moves the crosshair; lift clears it. Gating behind the hold is
+                // what keeps zoom/pan untouched: an immediate drag exceeds the hold's max distance and
+                // still pans (ZoomPanModifier), pinch still zooms, double-tap still resets. `.subviews`
+                // masks the gesture entirely on the call sites that don't opt in.
+                .gesture(touchScrubGesture, including: (touchScrub && showsHover) ? .all : .subviews)
+                #endif
             }
         }
         .frame(height: height)

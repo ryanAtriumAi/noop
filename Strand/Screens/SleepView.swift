@@ -97,12 +97,12 @@ struct SleepView: View {
     /// the nap's own `startTs` so one popover shows at a time even with several nap rows. (C1)
     @State private var napWhyStartTs: Int?
 
-    /// WHOOP-style stage highlight: tapping a stage row under the hypnogram lights that stage up
-    /// on the chart and recedes the rest (tap again to clear). Display-only selection state.
+    /// WHOOP-style stage highlight: tapping a stage row under the timeline lights that stage up on the
+    /// chart and recedes the rest (tap again to clear). Display-only selection state. (ryanAtriumAi #988)
     @State private var selectedStage: SleepStage? = nil
 
-    /// Sleeping heart-rate for the displayed night (1-min buckets), for the WHOOP-style HR chart
-    /// above the stage rows. Loaded once per night via `.task(id:)` on the stage card.
+    /// Sleeping heart-rate for the displayed night (1-min buckets), for the WHOOP-style HR chart above
+    /// the stage rows. Loaded once per night via `.task(id:)` on the stage card. (ryanAtriumAi #988)
     @State private var nightHR: [HRBucket] = []
 
     /// The transient UNDO banner shown after a suppressing delete (#65). Non-nil for ~7 seconds: carries
@@ -640,7 +640,7 @@ struct SleepView: View {
             : String(localized: "\(durationText(night.timeInBed)) in bed · \(efficiencyText(night)) efficiency")
         VStack(alignment: .leading, spacing: NoopMetrics.space2) {
             if intervals.count >= 2 {
-                // WHOOP sleep-details layout (thelocker reference): one full-width timeline ROW per
+                // WHOOP sleep-details layout (ryanAtriumAi #988): one full-width timeline ROW per
                 // stage — hatched track = the whole night, solid segments = when that stage occurred,
                 // header carries the stage %, duration right-aligned. Tap a row to highlight that
                 // stage; the others grey out. Replaces the 4-level hypnogram, whose staircase turned
@@ -681,8 +681,8 @@ struct SleepView: View {
                 stageLowConfidenceNote
             }
         }
-        // WHOOP top-chart data: 1-min sleeping-HR buckets for THIS night, reloaded only when the
-        // displayed night changes (same `.task(id:)` pattern the other per-night loads use).
+        // WHOOP top-chart data (ryanAtriumAi #988): 1-min sleeping-HR buckets for THIS night, reloaded
+        // only when the displayed night changes (same `.task(id:)` pattern the other per-night loads use).
         .task(id: night.session.startTs) {
             nightHR = await repo.hrBuckets(from: night.session.startTs,
                                            to: night.session.endTs,
@@ -699,7 +699,7 @@ struct SleepView: View {
     @ViewBuilder
     private func motionStrip(_ night: Night) -> some View {
         // Label above the trace, plot inset 10pt to line up with the stage-timeline rows' strips
-        // (the old 44+12 gutter matched the removed Hypnogram's y-axis column).
+        // (the old 44+12 gutter matched the removed Hypnogram's y-axis column). (ryanAtriumAi #988)
         VStack(alignment: .leading, spacing: 2) {
             Text("Move")
                 .font(StrandFont.footnote)
@@ -976,8 +976,8 @@ struct SleepView: View {
     }
 
     /// One WHOOP-style stage row. `fraction = minutes / total` sets both the % and the bar fill.
-    /// Tappable (WHOOP): selecting a row highlights that stage's segments on the hypnogram above
-    /// and recedes the rest; tapping the selected row again clears the highlight.
+    /// Tappable (WHOOP, ryanAtriumAi #988): selecting a row highlights that stage and recedes the
+    /// rest; tapping the selected row again clears the highlight.
     @ViewBuilder
     private func stageBreakdownRow(_ stage: SleepStage, minutes: Double, total: Double) -> some View {
         let color = StrandPalette.sleepStageColor(stage)
@@ -1026,7 +1026,7 @@ struct SleepView: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    // MARK: - WHOOP stage-timeline rows (the sleep-details reference design)
+    // MARK: - WHOOP stage-timeline rows (the sleep-details reference design, ryanAtriumAi #988)
 
     /// Clock labels for the timeline axis; "jmm" respects the device 12/24-hour setting.
     private static let stageAxisFormatter: DateFormatter = {
@@ -1120,7 +1120,7 @@ struct SleepView: View {
     }
 
     /// The tonight-vs-typical line under the stage rows. Selected: "REM 2h 45m · typically
-    /// 1h 50m–2h 20m — above your usual." Unselected: the tap affordance hint.
+    /// 1h 50m to 2h 20m, above your usual." Unselected: the tap affordance hint.
     @ViewBuilder
     private func stageInsight(_ s: Stages) -> some View {
         if let sel = selectedStage {
@@ -1303,9 +1303,10 @@ struct SleepView: View {
                 }
                 // Base trace across the whole night; the line BREAKS across >5-min data gaps.
                 // Split by signal confidence: clean/measured HR draws solid, weak-optical stretches
-                // (PPG conf < 0.3 — tattoo/low-perfusion territory, present only when the
-                // weak-signal mode recovered them) draw lighter + dashed, so a weak estimate is
-                // never presented as a clean measured beat.
+                // (PPG conf < 0.3) draw lighter + dashed, so a weak estimate is never presented as a
+                // clean measured beat. NOTE: with the default acceptance floor (0.3) no stored PPG
+                // sample carries conf < 0.3, so this weak branch is inert unless a future opt-in
+                // weak-signal mode (which needs a faithfulness eval first) lowers the floor.
                 let baseColor = selectedStage == nil
                     ? StrandPalette.restColor.opacity(0.9)
                     : StrandPalette.textTertiary.opacity(0.45)

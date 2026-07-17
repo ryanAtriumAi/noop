@@ -65,6 +65,14 @@ interface WhoopDao : DeviceRegistryDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSleepState(rows: List<SleepStateSampleEntity>): List<Long>
 
+    /** Upsert one Live Session (v22). Natural key (deviceId, startTs) — start (endTs null) then end. */
+    @Upsert
+    suspend fun upsertLiveSession(row: LiveSessionRow)
+
+    /** Most-recent Live Sessions first, for the look-back summary + streak. */
+    @Query("SELECT * FROM liveSession WHERE deviceId = :deviceId ORDER BY startTs DESC LIMIT :limit")
+    suspend fun recentLiveSessions(deviceId: String, limit: Int): List<LiveSessionRow>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertResp(rows: List<RespSample>): List<Long>
 
@@ -619,12 +627,15 @@ interface WhoopDao : DeviceRegistryDao {
     @Query("DELETE FROM battery WHERE ts < :minTs OR ts > :maxTs")
     suspend fun pruneBatteryByTs(minTs: Long, maxTs: Long): Int
 
-    /** Computed daily-metric rows whose `day` key is FUTURE (lexicographically after [today], valid for
-     *  "yyyy-MM-dd") or implausibly old (before [minDay]). String compare is correct for ISO dates. */
-    @Query("DELETE FROM dailyMetric WHERE day > :today OR day < :minDay")
+    /** Daily-metric rows whose `day` key is FUTURE (lexicographically after [today], valid for "yyyy-MM-dd",
+     *  any source) or implausibly old (before [minDay]) AND computed (`-noop`). The far-past floor is
+     *  `-noop`-scoped so a WHOOP CSV import (bare "my-whoop") carrying REAL multi-year history is never
+     *  purged (v8.2.1). String compare is correct for ISO dates. */
+    @Query("DELETE FROM dailyMetric WHERE day > :today OR (day < :minDay AND deviceId LIKE '%-noop')")
     suspend fun pruneDailyMetricByDay(today: String, minDay: String): Int
 
-    /** Computed sleep-session rows whose onset `startTs` is implausible (before [minTs] or after [maxTs]). */
-    @Query("DELETE FROM sleepSession WHERE startTs < :minTs OR startTs > :maxTs")
+    /** Sleep-session rows whose onset `startTs` is future (after [maxTs], any source) or implausibly old
+     *  (before [minTs]) AND computed (`-noop`), so an imported multi-year sleep history survives (v8.2.1). */
+    @Query("DELETE FROM sleepSession WHERE startTs > :maxTs OR (startTs < :minTs AND deviceId LIKE '%-noop')")
     suspend fun pruneSleepSessionByTs(minTs: Long, maxTs: Long): Int
 }

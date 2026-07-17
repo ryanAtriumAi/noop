@@ -319,6 +319,9 @@ struct RootView: View {
             // The Today active-workout indicator routes to the Live surface; LiveView then consumes the
             // one-shot `presentActiveWorkout` flag on appear to open the in-exercise screen.
             case .activeWorkout: selection = .live
+            // Live Sessions is presented from Today's own Start entry (a cover, not a sidebar item), so a
+            // deep-link lands the user on Today where that entry lives.
+            case .liveSession: selection = .today
             case nil: break
             }
             if dest != nil { router.requestedDestination = nil }

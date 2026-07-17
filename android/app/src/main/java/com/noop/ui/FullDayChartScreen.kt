@@ -82,6 +82,11 @@ fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
     var dayStartSec by remember { mutableStateOf(todayStart) }
     var didLand by remember { mutableStateOf(false) }
     val dayBounds = dayStartSec..(dayStartSec + 86_400)
+    // #986: a continuous left-drag can scroll back to the shown day plus the two before it (a rolling 3-day
+    // window), so older HR is reachable by dragging, not only the day-stepper. Deliberately bounded so one
+    // drag can't fling through weeks; the reload keys on the visible window so panned-to days load, and a day
+    // with no data falls to the empty state (parity with iOS FullDayChartView.panBounds).
+    val panBounds = (dayStartSec - 2 * 86_400)..(dayStartSec + 86_400)
 
     var metric by remember { mutableStateOf(TimelineMetric.Hr) }
     var ownedOnly by remember { mutableStateOf(true) }
@@ -147,7 +152,7 @@ fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     ScreenScaffold(
         title = "Deep Timeline",
-        subtitle = "Every second of your day, zoomable.",
+        subtitle = "Every second of your day. Drag back up to 3 days.",
     ) {
         // METRIC PILLS — horizontally scrollable so all six fit on a phone.
         Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
@@ -217,7 +222,7 @@ fun FullDayChartScreen(vm: AppViewModel, onBack: () -> Unit) {
                             points = points,
                             windowStart = visible.first,
                             windowEnd = visible.last,
-                            bounds = dayBounds,
+                            bounds = panBounds,   // #986: pan clamp is the rolling 3-day window, not one day
                             color = metricColor(metric),
                             modifier = Modifier.fillMaxWidth().height(280.dp),
                             onWindowChange = { window = it },
@@ -312,15 +317,20 @@ private suspend fun readTimeline(
     }
     val raw: List<TimelinePoint> = when (metric) {
         TimelineMetric.Hr -> emptyList()
-        TimelineMetric.Hrv ->
+        TimelineMetric.Hrv -> {
             // #803: plot a rolling rMSSD (ms) over the RR series, NOT the raw RR interval. Raw RR is the
             // beat-to-beat heart PERIOD, not variability, so labelling it "HRV" was dishonest. HrvAnalyzer
             // applies the SAME Malik/range artifact filter the nightly RMSSD uses, then slides a 5-min
             // window. The result is already (ts, value); skip the in-process downsample below (the
-            // windowing IS the smoothing) by returning here.
+            // windowing IS the smoothing) by returning here. A thinning stride (window/8, mirroring the
+            // Swift Repository caller) keeps a 1 Hz RR stream from emitting a point per beat and flooding
+            // the chart at day scale (the #575 point-count risk downsampleTimeline handles for the others).
+            // #1036 (ryanbr): stepSec closes this Android-only day-scale flood gap.
+            val hrvWindow = HrvAnalyzer.DEFAULT_ROLLING_WINDOW_SEC
             return@withContext runCatching { repo.rrIntervals(deviceId, from, to, 200_000) }.getOrDefault(emptyList())
-                .let { HrvAnalyzer.rollingRmssd(it) }
+                .let { HrvAnalyzer.rollingRmssd(it, windowSec = hrvWindow, stepSec = maxOf(1, hrvWindow / 8)) }
                 .map { (ts, v) -> TimelinePoint(ts, v) }
+        }
         TimelineMetric.Spo2 ->
             runCatching { repo.spo2Samples(deviceId, from, to, 200_000) }.getOrDefault(emptyList())
                 .mapNotNull { if (it.ir > 0) TimelinePoint(it.ts, it.red.toDouble() / it.ir) else null }

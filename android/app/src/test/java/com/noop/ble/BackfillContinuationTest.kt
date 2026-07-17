@@ -17,6 +17,8 @@ import org.junit.Test
  * #928 pinned here too: the predicate takes the REAL wall clock (`wallNowUnix`) so a strap clock set in
  * the FUTURE (a "newest" more than 48 h ahead of the wall) is excluded from the backlog test instead of
  * reading as endless backlog. Fixtures pass an explicit wall-now consistent with their timestamps.
+ * #1012 tightens it: a future-dated newest now stops guard 2b as well — its "real rows" are future-dated
+ * too, so the drain ends after one pass instead of chasing the future range through the whole cap.
  */
 class BackfillContinuationTest {
 
@@ -366,22 +368,58 @@ class BackfillContinuationTest {
         )
     }
 
-    /** #928 + #451 symmetry: a future-dated range answer is unreliable, but REAL rows persisting this
-     *  session are direct evidence of backlog, so the rows path still continues the drain (the exclusion
-     *  only removes the untrustworthy range shortcut, it never blocks demonstrated progress). */
+    /** #1012 (FLIPS the original #928-era assertion, which had this continuing): a FUTURE-dated range
+     *  answer means the strap BANKED future-dated records (#928), so the rows this session persisted are
+     *  themselves future-timestamped — NOT evidence of genuine backlog. Under the old "real rows keep
+     *  draining" logic, 2b chased the future-dated range through the whole 6-kick cap, each pass run to
+     *  its idle timeout: a ~1-min sync took ~15. Stop after the single pass; the periodic floor keeps
+     *  draining across connects. (The stale/PAST-epoch case 2b exists for is pinned separately by
+     *  continues_whenNewestStaleButRowsFlowing and stays continuing.) */
     @Test
-    fun futureClockNewest_stillContinuesOnRealRows() {
-        assertTrue(
+    fun futureClockNewest_stopsEvenOnRealRows() {
+        assertFalse(
             WhoopBleClient.shouldAutoContinue(
                 stillConnected = true,
-                strapNewestTs = wallNow + 30L * 86_400L,   // same future-dated answer
+                strapNewestTs = wallNow + 30L * 86_400L,   // future-dated answer (strap clock a month ahead)
                 ourFrontierTs = wallNow - 600L,
                 wallNowUnix = wallNow,
                 lastTrimAdvanced = true,
                 consecutiveCount = 0,
-                rowsPersistedThisSession = 240,            // but this pass banked real records
+                rowsPersistedThisSession = 240,            // rows banked — but they're future-dated too
             ),
         )
+    }
+
+    /** #1012 the reported burn, end to end: a future-clock strap kept handing over rows pass after pass
+     *  (18497, 850, 13212, 1729, 92676 in the reporter's log), so the old 2b chained through the whole
+     *  cap. The gated predicate must refuse the SECOND pass no matter how many rows keep flowing — the
+     *  chain length is exactly one (the pass that already ran before the decision). */
+    @Test
+    fun futureClockChain_stopsAfterOnePass() {
+        for (rows in listOf(18_497, 850, 13_212, 1_729, 92_676)) {
+            assertFalse(
+                "a future-dated range must never re-kick, even with $rows rows persisted",
+                WhoopBleClient.shouldAutoContinue(
+                    stillConnected = true,
+                    strapNewestTs = wallNow + 158L * 86_400L,   // ~158 days ahead, the reporter's strap
+                    ourFrontierTs = wallNow - 600L,
+                    wallNowUnix = wallNow,
+                    lastTrimAdvanced = true,
+                    consecutiveCount = 0,
+                    rowsPersistedThisSession = rows,
+                ),
+            )
+        }
+    }
+
+    /** #1012 helper: the future-dated discriminator shared by the predicate and the call-site stop log.
+     *  null = unknown range (NOT future-dated — the #451 stale-epoch rescue still applies); exactly 48 h
+     *  ahead is plausible skew (strictly-greater trips it); one second past is future-dated. */
+    @Test
+    fun isFutureDatedNewest_boundary() {
+        assertFalse(WhoopBleClient.isFutureDatedNewest(null, wallNow))
+        assertFalse(WhoopBleClient.isFutureDatedNewest(wallNow + 48L * 3600L, wallNow))
+        assertTrue(WhoopBleClient.isFutureDatedNewest(wallNow + 48L * 3600L + 1L, wallNow))
     }
 
     /** #928 boundary: exactly 48 h ahead is still plausible (the guard is strictly-greater, absorbing

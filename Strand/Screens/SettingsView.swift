@@ -1032,6 +1032,7 @@ struct SettingsView: View {
     /// model — a 4.0 owner still needs the export to share decoded streams.
     @ViewBuilder private var experimentalCard: some View {
         liquidTodayCard
+        liveSessionsCard
         if showFiveMGControls { fiveMGCard }
         sleepStagingCard
         weakSignalCard
@@ -1084,6 +1085,32 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
                 .tint(StrandPalette.accent)
                 Text("Replaces the Today tab with the prototype redesign. Turn it off any time to return to the classic dashboard. Reads the same live data from your strap.")
+                    .font(StrandFont.caption)
+                    .foregroundStyle(StrandPalette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Live Sessions (beta) — the silent-guardian in-workout coach. Default ON (the entry itself is
+    /// BETA-labelled on the Liquid Today); off removes the Start-session control entirely. Same key the
+    /// Today entry reads (`LiveSessionPrefs.betaKey`).
+    @AppStorage(LiveSessionPrefs.betaKey) private var liveSessionsBeta = true
+    private var liveSessionsCard: some View {
+        SettingsSection(
+            icon: "shield.lefthalf.filled",
+            title: "Experimental · Live Sessions",
+            blurb: "A one-tap guarded workout: the strap watches your heart rate against a band gated on today's Charge, and only ever buzzes to correct course. Silence means you're on track."
+        ) {
+            VStack(alignment: .leading, spacing: NoopMetrics.rowSpacing) {
+                Toggle(isOn: $liveSessionsBeta) {
+                    Text("Live Sessions (beta)")
+                        .font(StrandFont.subhead)
+                        .foregroundStyle(StrandPalette.textPrimary)
+                }
+                .toggleStyle(.switch)
+                .tint(StrandPalette.accent)
+                Text("Silence-first strap coaching during workouts.")
                     .font(StrandFont.caption)
                     .foregroundStyle(StrandPalette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

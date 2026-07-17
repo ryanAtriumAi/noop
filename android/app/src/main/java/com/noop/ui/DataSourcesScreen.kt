@@ -188,7 +188,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
                     restartNeeded = true
                     Toast.makeText(
                         context,
-                        "Imported. Fully close and reopen Strand to load it.",
+                        "Imported. Fully close and reopen NOOP to load it.",
                         Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -851,7 +851,7 @@ fun DataSourcesScreen(vm: AppViewModel) {
             }
             if (restartNeeded) {
                 Text(
-                    "Import staged. Fully close and reopen Strand to load the new data.",
+                    "Import staged. Fully close and reopen NOOP to load the new data.",
                     style = NoopType.subhead,
                     color = Palette.statusWarning,
                 )

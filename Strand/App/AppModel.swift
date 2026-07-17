@@ -476,6 +476,15 @@ final class AppModel: ObservableObject {
         // already running and refreshes the dashboard itself once the new scores persist. (PR #218)
         await intelligence.analyzeRecent()
         await refreshV5Signals()
+        #if os(iOS)
+        // #980: a strap backfill routinely completes while the app is BACKGROUNDED (it runs as a
+        // bluetooth-central, so it stays alive to receive the offload). The only other widget-publish
+        // sites are gated on scenePhase == .active, so a background sync would rescore today's data but
+        // never rewrite the shared App-Group snapshot or call WidgetCenter.reloadAllTimelines — the
+        // widget kept showing yesterday's numbers. Publishing here, on the real "new data landed"
+        // signal, pushes the fresh snapshot to the home-screen widget without needing a foreground.
+        await WidgetSnapshot.publish(from: self)
+        #endif
     }
 
     /// Fold a fresh reading into the smoothing window and republish a stable bpm.

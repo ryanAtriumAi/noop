@@ -354,6 +354,153 @@ class OuraDriverTest {
         assertArrayEquals(bytes("01020304"), ev.value.rawPayload)
     }
 
+    // MARK: - Activity info (0x50, Tier B, third-party formula) - real Gen 3 captures (PR #960)
+    //
+    // PARITY: the six payloads below are byte-for-byte the real Gen 3 captures pinned in the Swift
+    // OuraDriverTests (PR #960 investigation, 2026-07-02): three short static captures, then a full day
+    // from steady resting (~0.9 MET) through a vigorous-activity burst (7.4 MET). The ringTimestamp was
+    // not part of the captures, so the fixture `rt` stamps them - the pinned evidence is the decoded
+    // state/MET values, each RECOMPUTED from the s6.13 formula (met = byte*0.1 below 0x80), not copied
+    // blind (the v8.0.1 Oura SpO2 bug was a wrong-decode that asserted constants would have hidden).
+
+    @Test
+    fun testActivityInfoDecodesRealCapture1() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key, allowTierB = true)
+        // Raw payload 41 12 13 13 20: state 0x41=65; MET 18*0.1, 19*0.1, 19*0.1, 32*0.1.
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("4112131320"))
+        val events = d.ingest(rec)
+        assertEquals(
+            listOf<OuraEvent>(
+                OuraEvent.ActivityInfo(
+                    OuraActivityInfo(ringTimestamp = rt, state = 0x41, met = listOf(1.8, 1.9, 1.9, 3.2)),
+                ),
+            ),
+            events,
+        )
+        assertTrue("activityInfo must still report isTierB - the formula is UNVERIFIED", events[0].isTierB)
+    }
+
+    @Test
+    fun testActivityInfoDecodesRealCapture2() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key, allowTierB = true)
+        // Raw payload 37 21 17 0e 0e 0d 0f 11: state 0x37=55; MET 3.3, 2.3, 1.4, 1.4, 1.3, 1.5, 1.7.
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("3721170e0e0d0f11"))
+        assertEquals(
+            listOf<OuraEvent>(
+                OuraEvent.ActivityInfo(
+                    OuraActivityInfo(ringTimestamp = rt, state = 0x37,
+                                     met = listOf(3.3, 2.3, 1.4, 1.4, 1.3, 1.5, 1.7)),
+                ),
+            ),
+            d.ingest(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoDecodesRealCapture3() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key, allowTierB = true)
+        // Raw payload 4a 19 20 0e 18: state 0x4a=74; MET 2.5, 3.2, 1.4, 2.4.
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("4a19200e18"))
+        assertEquals(
+            listOf<OuraEvent>(
+                OuraEvent.ActivityInfo(
+                    OuraActivityInfo(ringTimestamp = rt, state = 0x4a, met = listOf(2.5, 3.2, 1.4, 2.4)),
+                ),
+            ),
+            d.ingest(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoDecodesRealCapture4Resting() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key, allowTierB = true)
+        // Full-day session, steady resting: state 0, MET 1.1 then 12 x 0.9 (bytes 0x0B, 0x09 x 12).
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("000b090909090909090909090909"))
+        assertEquals(
+            listOf<OuraEvent>(
+                OuraEvent.ActivityInfo(
+                    OuraActivityInfo(ringTimestamp = rt, state = 0,
+                                     met = listOf(1.1, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9)),
+                ),
+            ),
+            d.ingest(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoDecodesRealCapture5ModerateActivity() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key, allowTierB = true)
+        // Light/moderate period: state 0x2E=46, 13 MET samples 1.2-2.3.
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("2e1711110e0d110d0d0d0e0e0c13"))
+        assertEquals(
+            listOf<OuraEvent>(
+                OuraEvent.ActivityInfo(
+                    OuraActivityInfo(ringTimestamp = rt, state = 46,
+                                     met = listOf(2.3, 1.7, 1.7, 1.4, 1.3, 1.7, 1.3, 1.3, 1.3, 1.4, 1.4, 1.2, 1.9)),
+                ),
+            ),
+            d.ingest(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoDecodesRealCapture6ExerciseBurst() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key, allowTierB = true)
+        // Vigorous burst: state 0x8B=139 (high bit set on the STATE byte, which is NOT MET-encoded),
+        // MET 1.8 and 7.4 (0x4A=74 -> 7.4, the highest real value seen). Also the shortest real payload
+        // (2 samples), consistent with more frequent flushes during a high-variability period.
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("8b124a"))
+        assertEquals(
+            listOf<OuraEvent>(
+                OuraEvent.ActivityInfo(
+                    OuraActivityInfo(ringTimestamp = rt, state = 139, met = listOf(1.8, 7.4)),
+                ),
+            ),
+            d.ingest(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoHighByteBranchUsesCoarseSlope() {
+        // No real capture has hit the >= 0x80 MET branch yet (nothing above 7.4 MET seen), so pin it
+        // with SYNTHETIC vectors recomputed from the s6.13 formula: met = 12.8 + (byte - 128) * 0.2.
+        //   0x80 = 128 -> 12.8  |  0x90 = 144 -> 12.8 + 16*0.2 = 16.0  |  0xFF = 255 -> 12.8 + 127*0.2 = 38.2
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("018090ff"))
+        assertEquals(
+            OuraActivityInfo(ringTimestamp = rt, state = 1, met = listOf(12.8, 16.0, 38.2)),
+            OuraDecoders.decodeActivityInfo(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoDroppedByDefaultLikeOtherTierB() {
+        val d = OuraDriver(ringGen = OuraRingGen.GEN3, authKey = key)   // allowTierB defaults to false
+        val rec = OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt,
+                             payload = bytes("4112131320"))
+        assertEquals(
+            "the Tier-B gate must cover ActivityInfo too",
+            emptyList<OuraEvent>(),
+            d.ingest(rec),
+        )
+    }
+
+    @Test
+    fun testActivityInfoEmptyPayloadDecodesToNull() {
+        // No state byte at all -> honest null, never a guessed state.
+        assertNull(
+            OuraDecoders.decodeActivityInfo(
+                OuraRecord(type = OuraEventTag.ACTIVITY_INFO.raw, ringTimestamp = rt, payload = intArrayOf()),
+            ),
+        )
+    }
+
     // MARK: - Live-HR push routing + decode
 
     @Test

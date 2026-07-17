@@ -46,8 +46,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PairedDeviceRow::class,
         DayOwnershipRow::class,
         LabMarkerRow::class,
+        LiveSessionRow::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = false,
 )
 abstract class WhoopDatabase : RoomDatabase() {
@@ -400,8 +401,38 @@ abstract class WhoopDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v15 -> v16: ADDITIVE, adds the `liveSession` table (Live Sessions). One row per silent-guardian
+         * coaching session, natural key (deviceId, startTs); `endTs` null while in progress. Twin of the Swift
+         * WhoopStore v22 migration. CREATE TABLE only (no existing data touched). The SQL MUST match Room's
+         * generated schema for [LiveSessionRow] exactly: nullable `endTs`/`chargeAtStart` (no NOT NULL), the
+         * rest NOT NULL (Kotlin non-null, no SQL DEFAULT), composite PRIMARY KEY (deviceId, startTs) in
+         * declaration order. No destructive fallback (see the class doc). Exposed as [LIVE_SESSION_MIGRATION_SQL]
+         * so a plain-JVM unit test can pin the shape without Robolectric.
+         * See docs/superpowers/specs/2026-07-04-live-sessions-design.md.
+         */
+        internal val LIVE_SESSION_MIGRATION_SQL: List<String> = listOf(
+            "CREATE TABLE IF NOT EXISTS `liveSession` (`deviceId` TEXT NOT NULL, " +
+                "`startTs` INTEGER NOT NULL, `endTs` INTEGER, `chargeAtStart` REAL, " +
+                "`floorBpm` REAL NOT NULL, `ceilingBpm` REAL NOT NULL, `inBandSec` REAL NOT NULL, " +
+                "`belowSec` REAL NOT NULL, `aboveSec` REAL NOT NULL, `pushCount` INTEGER NOT NULL, " +
+                "`easeCount` INTEGER NOT NULL, `hrSource` TEXT NOT NULL, " +
+                "PRIMARY KEY(`deviceId`, `startTs`))",
+        )
+
+        internal val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (stmt in LIVE_SESSION_MIGRATION_SQL) db.execSQL(stmt)
+            }
+        }
+
         private fun build(appContext: Context): WhoopDatabase =
             Room.databaseBuilder(appContext, WhoopDatabase::class.java, DB_NAME)
+                // #1014: replace ONLY the corruption handling of the default open-helper. The
+                // platform default silently DELETES a corrupt database file (non-resendable strap
+                // history gone without a trace); this factory logs + preserves the file instead.
+                // Every migration/lifecycle callback is delegated to Room unchanged.
+                .openHelperFactory(CorruptionPreservingOpenHelperFactory())
                 // Real additive migration, NO destructive fallback (see the class doc): with
                 // exportSchema=false a silent rebuild would lose already-acked, non-resendable strap
                 // history on any schema mismatch. Room throws loudly instead; CI guards the SQL.
@@ -409,8 +440,25 @@ abstract class WhoopDatabase : RoomDatabase() {
                     MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
                     MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
-                    MIGRATION_14_15,
+                    MIGRATION_14_15, MIGRATION_15_16,
                 )
+                // #1037: a FRESH install builds the schema straight at the current version and runs NO
+                // migrations, so the MIGRATION_7_8 "my-whoop" registry seed never fires and the WHOOP,
+                // though paired and streaming fine, never appears in the Devices list. Seed the canonical
+                // row on create too (same idempotent INSERT OR IGNORE as the migration) so a first-ever
+                // install still lists its WHOOP. iOS/GRDB re-runs migrations on a fresh DB, so it never hit this.
+                .addCallback(object : RoomDatabase.Callback() {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        val now = System.currentTimeMillis() / 1000
+                        db.execSQL(
+                            "INSERT OR IGNORE INTO `pairedDevice` " +
+                                "(`id`, `brand`, `model`, `nickname`, `sourceKind`, `capabilities`, " +
+                                "`status`, `addedAt`, `lastSeenAt`) VALUES " +
+                                "('my-whoop', 'WHOOP', 'WHOOP', NULL, 'liveBLE', " +
+                                "'hr,hrv,spo2,skinTemp,sleep,strainLoad', 'active', $now, $now)",
+                        )
+                    }
+                })
                 .build()
     }
 }

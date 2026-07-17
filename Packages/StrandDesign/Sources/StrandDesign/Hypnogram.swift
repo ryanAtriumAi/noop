@@ -5,12 +5,13 @@ import SwiftUI
 
 // MARK: - Hypnogram (§9.4 Sleep)
 //
+// (WHOOP-style hypnogram visuals adopted from ryanAtriumAi #988.)
 // A sleep-stage horizontal banded timeline, WHOOP-style. Four faint stage lanes
 // (awake top → deep bottom) anchor height → stage so the chart reads even across
 // gaps; each interval is a flat, square-ended bar whose WIDTH tracks its duration
 // (brief stages stay slim ticks, never fat dots) coloured per §9.1 with the sleep
-// tokens — awake pale slate, light blue (#4A90E2), deep blue (#2F6FCB), REM bright
-// blue (#6FA8E8). Transitions are bright, round-capped vertical risers, so the
+// tokens — awake pale grey, light periwinkle (#A7A4F4), deep orchid (#FD96FD), REM
+// purple (#AE5BEF). Transitions are quiet, round-capped vertical risers, so the
 // whole night reads as one continuous, legible "staircase".
 
 /// A single stage interval. `start`/`end` are seconds from the start of the night.

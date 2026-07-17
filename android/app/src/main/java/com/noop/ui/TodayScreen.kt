@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Info
@@ -487,7 +488,12 @@ fun TodayScreen(
     // this is read once into local state (mirrors iOS @AppStorage in TodayView).
     val showDayCycleBackground = remember { NoopPrefs.showDayCycleBackground(context) }
     var hydrationTotalMl by remember { mutableStateOf(0.0) }
-    LaunchedEffect(days, hydrationEnabled) {
+    // #989: `days` only changes on a data refresh, which a hydration write never causes, so the card sat
+    // stale after logging a drink until an unrelated sync landed. Keying on the store's mutationSeq too
+    // re-reads the one metric row the moment a drink is logged / edited / deleted. Mirrors the iOS
+    // Repository.hydrationSeq trigger.
+    val hydrationSeq by HydrationStore.mutationSeq.collectAsStateWithLifecycle()
+    LaunchedEffect(days, hydrationEnabled, hydrationSeq) {
         hydrationTotalMl = if (hydrationEnabled) {
             runCatching { HydrationStore.total(viewModel.repo) }.getOrDefault(0.0)
         } else 0.0
@@ -513,6 +519,16 @@ fun TodayScreen(
     // existing RecoveryDriversSection (gated to the calibration countdown when the night can't score) plus
     // the folded Readiness card (S4). Not persisted, so it reopens closed. Mirrors iOS showChargeBreakdown.
     var showChargeBreakdown by remember { mutableStateOf(false) }
+    // LIVE SESSIONS (beta, default ON): the "Start session" entry under the hero + its full-screen Dialog
+    // (the same presentation the live-workout overlay / Charge breakdown use — deliberately NOT a nav
+    // destination, so dismissing it leaves the session's runner coaching and this entry is the way back
+    // in). Gated on the Settings `live_sessions_beta` flag; SharedPreferences isn't reactive, so it's read
+    // once into local state like the hydration/day-cycle gates above. The ACTIVE runner is also collected
+    // here (null ↔ runner only — the per-second snapshot is scoped inside the entry card) so a running
+    // session keeps its way-back-in card even if the beta flag was just switched off.
+    var showLiveSession by remember { mutableStateOf(false) }
+    val liveSessionsEnabled = remember { LiveSessionPrefs.enabled(context) }
+    val activeLiveSession by LiveSessionRunner.active.collectAsStateWithLifecycle()
     // S4: the Synthesis card collapses to a one-liner that expands on tap (default collapsed). Mirrors iOS.
     var synthesisExpanded by remember { mutableStateOf(false) }
     // S5: the Key Metrics grid caps at the first METRICS_COLLAPSED_CAP tiles behind a "Show all metrics"
@@ -681,12 +697,19 @@ fun TodayScreen(
     // merges imported + computed sleep_performance (imported-wins), so an importer sees the export's
     // figure and a Bluetooth-only user sees the on-device composite. Null until loaded / no night yet.
     var restScoreForDay by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(days, selectedDayKey) {
+    LaunchedEffect(days, selectedDayKey, selectedDayOffset) {
         val byDay = runCatching {
             viewModel.repo.resolvedSeries("sleep_performance", "my-whoop", "0000-00-00", "9999-99-99")
                 .values.associate { it.first to it.second }
         }.getOrDefault(emptyMap())
-        restScoreForDay = byDay[selectedDayKey] ?: byDay.entries.maxByOrNull { it.key }?.value
+        // #977: the tail-fallback (latest scored night) is now freshness-gated. A live 5.0 whose sleep never
+        // scores used to pin Rest to the weeks-old series tail forever while Charge advanced; if that tail is
+        // stale, fall through to null so the Rest ring shows its needs-a-tracked-night state instead of a
+        // frozen number. `selectedDayKey` is today's key at offset 0, so it anchors the freshness check.
+        val latest = byDay.entries.maxByOrNull { it.key }
+        restScoreForDay = freshRestScore(
+            todayValue = byDay[selectedDayKey], lastDay = latest?.key, lastValue = latest?.value,
+            isTodaySelected = selectedDayOffset == 0, today = selectedDayKey)
     }
 
     // The Rest tile's SPARKLINE series (#614 follow-up). The Rest tile's NUMBER is the Rest composite
@@ -800,6 +823,18 @@ fun TodayScreen(
             isCalibrating = recoveryCalibration != null,
             today = carryOverTodayKey,
         )
+    }
+    // The freshest STRICTLY-PRIOR night carrying a real overnight VITAL (HRV / resting-HR / respiratory),
+    // recovery-INDEPENDENT (#543 follow-up). HRV/RHR/resp exist without a recovery score, so a post-update
+    // re-analysis that nulls last night's recovery while preserving its avgHrv/restingHr must NOT fall back
+    // to an OLDER recovery-scored day for the vitals (that's the tile-vs-card mismatch: the per-field tiles
+    // already keep last night's real value; the whole-row card was discarding it). The vitals read PER-FIELD
+    // today-first with THIS carry as the fallback, kept separate from lastScoredRecoveryDay (Charge ring /
+    // Synthesis / Contributors / Readiness stay recovery-gated). Future-clock-safe: the upper bound is the
+    // LATER of the resolved today row's own key and carryOverTodayKey, mirroring lastScoredRecoveryDay's
+    // #547 guard. Non-null only on today (offset 0). Mirrors iOS Repository.lastVitalsDay.
+    val lastVitalsDay: DailyMetric? = remember(days, carryOverTodayKey, selectedDayOffset, displayMetric) {
+        if (selectedDayOffset == 0) lastVitalsRow(days, maxOf(displayMetric?.day ?: "", carryOverTodayKey)) else null
     }
     // Carry-over Charge for TODAY, the prior scored row's recovery + its "Last night · <date>" caption.
     // Derived from lastScoredRecoveryDay so Charge and every other recovery tile carry the SAME prior day.
@@ -1118,13 +1153,39 @@ fun TodayScreen(
         }
         }
 
+        // LIVE SESSIONS (beta): the compact "Start session · BETA" entry, directly under the hero. Today
+        // only (offset 0 — a session is a now-thing), gated on the Settings beta flag; a RUNNING session
+        // keeps the card visible regardless (it is the designed way back into the dismissed session dialog,
+        // see LiveSessionRunner's lifetime note). The card swaps itself to "Session running" / "Session
+        // ended" (it scopes the runner's per-second snapshot internally, like WorkoutInProgressCard's clock).
+        if (selectedDayOffset == 0 && (liveSessionsEnabled || activeLiveSession != null)) {
+            item {
+                LiveSessionEntryCard(
+                    onOpen = {
+                        // Only BEGIN when nothing is in flight: an active runner (running, or ended and
+                        // holding its unseen summary) is simply re-presented, never displaced — so a tap
+                        // can't silently discard a running session or a summary awaiting its "Done".
+                        if (LiveSessionRunner.active.value == null) {
+                            startOrResumeLiveSession(viewModel, context)
+                        }
+                        showLiveSession = true
+                    },
+                )
+            }
+        }
+
         // HEART RATE, the live HR thread / trend card, directly under the hero — the SAME order as the iOS
         // liquid Today (scene → heartRateSection → yourCardsSection). It carries its own live-HR thread + the
         // banked 5-minute fallback + the "connect your strap" empty state, all self-contained (its own data
         // loads), so moving it up here is a pure re-order that preserves every binding. Mirrors iOS
         // heartRateSection sitting first after the hero.
         item {
-        Box(modifier = Modifier.fillMaxWidth().staggeredAppear(5)) {
+        // #991: HeartRateTrendCard emits its SectionHeader + card as two siblings; a Box overlaid them
+        // (the header showed THROUGH the card in the v8 layout). A spaced Column stacks them instead.
+        Column(
+            modifier = Modifier.fillMaxWidth().staggeredAppear(5),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             HeartRateTrendCard(viewModel, days, selectedDay, todayDate, displayMetric, effortScale)
         }
         }
@@ -1151,6 +1212,10 @@ fun TodayScreen(
                 // the rest of Today shows last night's carried values. Routing the cards through the same
                 // `carriedDay ?: day` source the HeroMetricRows + MetricGrid already use brings them to parity.
                 carriedDay = lastScoredRecoveryDay,
+                // The recovery-INDEPENDENT vitals carry (#543 follow-up): the overnight HRV / Resting HR /
+                // Respiratory cards read PER-FIELD today-first with THIS fallback, so a night whose recovery
+                // was nulled post-update still surfaces its OWN preserved vitals (not an older scored day's).
+                vitalsDay = lastVitalsDay,
                 stress = stressToday,
                 fitnessAge = fitnessAgeToday,
                 vitality = vitalityToday,
@@ -1232,7 +1297,7 @@ fun TodayScreen(
         // they don't blank to "No Data" while live HR ticks (#543). Staggered in as index 3.
         item {
         Box(modifier = Modifier.fillMaxWidth().staggeredAppear(3)) {
-            HeroMetricRows(day = displayMetric, carriedDay = lastScoredRecoveryDay)
+            HeroMetricRows(day = displayMetric, carriedDay = lastScoredRecoveryDay, vitalsDay = lastVitalsDay)
         }
         }
 
@@ -1298,7 +1363,12 @@ fun TodayScreen(
         }
         }
         item {
-        Box(modifier = Modifier.fillMaxWidth().staggeredAppear(6)) {
+        // #991: same fix as the HR card — TodayWorkoutsSection emits header + card as two siblings, so a
+        // Box overlaid them. Stack them in a spaced Column.
+        Column(
+            modifier = Modifier.fillMaxWidth().staggeredAppear(6),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             TodayWorkoutsSection(footer.recentWorkouts)
         }
         }
@@ -1366,6 +1436,20 @@ fun TodayScreen(
                     openGuide(ScoreSection.CHARGE)
                 },
             )
+        }
+    }
+
+    // LIVE SESSIONS (beta): the full-screen session dialog — the same presentation the live-workout
+    // overlay uses on Live (Dialog, usePlatformDefaultWidth = false). Dismissing it only HIDES the
+    // screen: the runner (held in LiveSessionRunner.active, ticking on the app-wide viewModelScope)
+    // keeps guarding, and the entry card above re-opens the same session. Only "End session" + the
+    // summary's "Done" (inside the screen) actually finish and clear it.
+    if (showLiveSession) {
+        Dialog(
+            onDismissRequest = { showLiveSession = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            LiveSessionScreen(vm = viewModel, onClose = { showLiveSession = false })
         }
     }
 
@@ -1492,6 +1576,85 @@ private fun WorkoutInProgressCard(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The compact Live Sessions entry under the hero ("Start session · BETA"). Three honest states off the
+ * process-wide [LiveSessionRunner.active]: no session → start affordance; session running → the way back
+ * into the dismissed session dialog (with a live elapsed clock); session ended but its summary not yet
+ * Done-dismissed → "See the summary". The runner's 1 Hz snapshot is collected INSIDE this card only, so
+ * the per-second tick recomposes this card, never the Today body (the WorkoutInProgressCard idiom).
+ * The whole card is one tap target; [onOpen] begins/re-presents the session dialog.
+ */
+@Composable
+private fun LiveSessionEntryCard(onOpen: () -> Unit) {
+    val active by LiveSessionRunner.active.collectAsStateWithLifecycle()
+    val runner = active
+    var running = false
+    var summaryWaiting = false
+    var elapsed = ""
+    if (runner != null) {
+        val snap by runner.snapshot.collectAsStateWithLifecycle()
+        running = !snap.ended
+        summaryWaiting = snap.ended
+        elapsed = elapsedClock(snap.elapsedSec.toLong())
+    }
+    val teal = Palette.metricCyan
+    val title = when {
+        running -> "Session running"
+        summaryWaiting -> "Session ended"
+        else -> "Start session"
+    }
+    val detail = when {
+        running -> "Guarding — silence means you're on track."
+        summaryWaiting -> "See the summary of your last session."
+        else -> "Strap-guided effort session. It only buzzes when you drift off today's band."
+    }
+
+    // liquidPress on the whole tappable card (same interactionSource on clickable + press), matching the
+    // workout-in-progress card above. Merged semantics so TalkBack reads one Button, not four stops.
+    val interaction = remember { MutableInteractionSource() }
+    NoopCard(
+        tint = teal,
+        modifier = Modifier
+            .liquidPress(interaction)
+            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$title, beta. $detail"
+            },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Metrics.space12),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(
+                Icons.Filled.TrackChanges,
+                contentDescription = null,
+                tint = teal,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Metrics.space8),
+                ) {
+                    Text(title, style = NoopType.headline, color = Palette.textPrimary)
+                    StatePill("BETA", tone = StrandTone.Accent, showsDot = false)
+                }
+                Text(detail, style = NoopType.footnote, color = Palette.textTertiary)
+            }
+            if (running) {
+                Text(elapsed, style = NoopType.number(15f), color = Palette.textPrimary)
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Palette.textTertiary,
+                modifier = Modifier.size(Metrics.iconSmall),
+            )
         }
     }
 }
@@ -2562,13 +2725,22 @@ private fun RingNeedsTrackedNight() {
 // README "Metric row" card; the SOLID/CALIBRATING pill + Synthesis insight moved into [SynthesisHeroCard].
 
 /** The three hero vitals as README metric rows, HRV (teal) · Resting HR (rose) · Respiratory (blue).
- *  When today isn't scored yet (#543), reads the carried last-scored day instead of blanking to "No Data",
- *  with ONE card-level "Last night · <date>" footnote so the whole recovery side reads consistently as a
- *  prior read. Each row still falls through to "No Data" for a metric the carried row genuinely lacks. */
+ *  Reads PER-FIELD today-first with a recovery-INDEPENDENT vitals carry ([vitalsDay]) as the fallback
+ *  (#543 follow-up), so a night whose recovery was nulled post-update still shows its OWN preserved HRV /
+ *  RHR / respiratory rather than an older recovery-scored day's numbers (or "No Data"). This aligns the
+ *  card to the Key-Metrics tiles, which already read per-field. Each row still falls through to "No Data"
+ *  for a vital neither today nor the carry supplies. */
 @Composable
-private fun HeroMetricRows(day: DailyMetric?, carriedDay: DailyMetric? = null) {
-    // The row the vitals read from: today's own when it carries recovery, else the carried prior day.
-    val vd = carriedDay ?: day
+private fun HeroMetricRows(day: DailyMetric?, carriedDay: DailyMetric? = null, vitalsDay: DailyMetric? = null) {
+    // Per-field, today-first: today's own value wins; the vitals carry only fills a field today lacks.
+    val hrv = day?.avgHrv ?: vitalsDay?.avgHrv
+    val rhr = day?.restingHr ?: vitalsDay?.restingHr
+    val resp = day?.respRateBpm ?: vitalsDay?.respRateBpm
+    // The caption reflects the row the shown vitals actually came from: if today supplied ANY of them the
+    // values are today's own, so don't stamp them as a prior "Last night · <date>"; only when EVERY shown
+    // vital is carried do we stamp the carry's date (relabelled "Latest sleep · <date>" when weeks-old).
+    val carriedFromVitals = day?.avgHrv == null && day?.restingHr == null && day?.respRateBpm == null &&
+        (hrv != null || rhr != null || resp != null) && vitalsDay != null
     // iOS `recoveryVitalsSection`: a frosted card with a "RECOVERY VITALS" header + a "last night · <date>"
     // on the right, then three `vitalRow`s (26dp mini LIQUID VESSEL + label + value). NoopCard supplies the
     // same neutral surfaceRaised + hairline as iOS's frosted card. Inner spacing 12, matching iOS.
@@ -2579,30 +2751,30 @@ private fun HeroMetricRows(day: DailyMetric?, carriedDay: DailyMetric? = null) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Overline("Recovery vitals", modifier = Modifier.weight(1f))
-                // iOS `lastNightLine` — "Last night · <date>" (or the carried day's stamp when carried).
+                // iOS `lastNightLine` — today's own "Last night · <date>" unless the shown vitals are a carry.
                 Text(
-                    if (carriedDay != null) carriedCaption(carriedDay.day) else heroVitalsLastNightLine(),
+                    if (carriedFromVitals) carriedCaption(vitalsDay!!.day) else heroVitalsLastNightLine(),
                     style = NoopType.caption,
                     color = Palette.textTertiary,
                 )
             }
             HeroVitalRow(
                 label = "Heart-rate variability",
-                value = vd?.avgHrv?.let { "${it.roundToInt()} ms" } ?: NO_DATA,
+                value = hrv?.let { "${it.roundToInt()} ms" } ?: NO_DATA,
                 tint = Palette.metricCyan,
-                fraction = vd?.avgHrv?.let { (it / 120.0).coerceIn(0.0, 1.0) },
+                fraction = hrv?.let { (it / 120.0).coerceIn(0.0, 1.0) },
             )
             HeroVitalRow(
                 label = "Resting heart rate",
-                value = vd?.restingHr?.let { "$it bpm" } ?: NO_DATA,
+                value = rhr?.let { "$it bpm" } ?: NO_DATA,
                 tint = Palette.metricRose,
-                fraction = vd?.restingHr?.let { (it / 100.0).coerceIn(0.0, 1.0) },
+                fraction = rhr?.let { (it / 100.0).coerceIn(0.0, 1.0) },
             )
             HeroVitalRow(
                 label = "Breaths per minute",
-                value = vd?.respRateBpm?.let { String.format(Locale.US, "%.1f rpm", it) } ?: NO_DATA,
+                value = resp?.let { String.format(Locale.US, "%.1f rpm", it) } ?: NO_DATA,
                 tint = Palette.accent,
-                fraction = vd?.respRateBpm?.let { (it / 24.0).coerceIn(0.0, 1.0) },
+                fraction = resp?.let { (it / 24.0).coerceIn(0.0, 1.0) },
             )
         }
     }
@@ -2654,6 +2826,7 @@ private fun YourCardsSection(
     cards: List<DashboardCard>,
     day: DailyMetric?,
     carriedDay: DailyMetric?,
+    vitalsDay: DailyMetric?,
     stress: Double?,
     fitnessAge: Double?,
     vitality: Double?,
@@ -2699,6 +2872,7 @@ private fun YourCardsSection(
                         card = card,
                         day = day,
                         carriedDay = carriedDay,
+                        vitalsDay = vitalsDay,
                         stress = stress,
                         fitnessAge = fitnessAge,
                         vitality = vitality,
@@ -2713,6 +2887,7 @@ private fun YourCardsSection(
                         card = card,
                         day = day,
                         carriedDay = carriedDay,
+                        vitalsDay = vitalsDay,
                         stress = stress,
                         fitnessAge = fitnessAge,
                         vitality = vitality,
@@ -2810,13 +2985,16 @@ private fun dashboardCardTint(card: DashboardCard): Color = when (card) {
  *   Stress = stress/3 · Fitness age = 0.5 (fixed) · Vitality = vitality/100 · HRV = avgHrv/120 ·
  *   Resting HR = restingHr/100 · Respiratory = respRate/24 · Steps = steps/10000 · Sleep = totalSleepMin/480 ·
  *   Coupled = 0.6 (fixed) · Blood oxygen / Skin temp / Calories / Hydration = null (empty, not half-full).
- * Reads the SAME `carriedDay ?: day` carry-over the row VALUE uses for the overnight vitals, so the vessel
- * fill and the number agree after the logical-day rollover.
+ * The three overnight vitals (HRV / Resting HR / Respiratory) read PER-FIELD today-first with the
+ * recovery-INDEPENDENT [vitalsDay] carry, matching the row VALUE, so the vessel fill and the number agree
+ * (and a recovery-nulled night keeps its OWN preserved vitals). Sleep keeps the recovery-gated
+ * `carriedDay ?: day` carry.
  */
 private fun dashboardCardFraction(
     card: DashboardCard,
     day: DailyMetric?,
     carriedDay: DailyMetric?,
+    vitalsDay: DailyMetric?,
     stress: Double?,
     fitnessAge: Double?,
     vitality: Double?,
@@ -2829,9 +3007,9 @@ private fun dashboardCardFraction(
         DashboardCard.STRESS -> over(stress, 3.0)
         DashboardCard.FITNESS_AGE -> if (fitnessAge != null) 0.5 else null
         DashboardCard.VITALITY -> over(vitality, 100.0)
-        DashboardCard.HRV -> over(vd?.avgHrv, 120.0)
-        DashboardCard.RESTING_HR -> over(vd?.restingHr?.toDouble(), 100.0)
-        DashboardCard.RESPIRATORY -> over(vd?.respRateBpm, 24.0)
+        DashboardCard.HRV -> over(day?.avgHrv ?: vitalsDay?.avgHrv, 120.0)
+        DashboardCard.RESTING_HR -> over((day?.restingHr ?: vitalsDay?.restingHr)?.toDouble(), 100.0)
+        DashboardCard.RESPIRATORY -> over(day?.respRateBpm ?: vitalsDay?.respRateBpm, 24.0)
         DashboardCard.STEPS -> {
             val steps = (day?.steps ?: importedStepsForDay ?: estimatedStepsForDay)?.toDouble()
             over(steps, 10000.0)
@@ -2850,16 +3028,18 @@ private fun dashboardCardFraction(
  * the SAME reads the rest of Today uses (displayMetric vitals, the pinned Stress / Fitness age / Vitality,
  * steps, calories, sleep duration). Mirrors iOS dashboardValue.
  *
- * The overnight-vital cards (HRV / Resting HR / Respiratory / SpO₂ / Skin Temp / Sleep) read
- * `carriedDay ?: day`, the SAME carry-over the HeroMetricRows + Key-Metrics tiles use (#543), so right
- * after the logical-day rollover, before tonight is scored, they show last night's carried values instead
- * of blanking to "No Data". Steps / Calories stay on today's own row (they accrue through the day, never
- * a recovery-night carry). Stress / Fitness age / Vitality come from their own resolved loads.
+ * The three overnight vitals (HRV / Resting HR / Respiratory) read PER-FIELD today-first with the
+ * recovery-INDEPENDENT [vitalsDay] carry (#543 follow-up), so a night whose recovery was nulled post-update
+ * still shows its OWN preserved value rather than an older recovery-scored day's (the tile-vs-card fix).
+ * SpO₂ / Skin Temp / Sleep keep the recovery-gated `carriedDay ?: day` carry. Steps / Calories stay on
+ * today's own row (they accrue through the day, never a carry). Stress / Fitness age / Vitality come from
+ * their own resolved loads.
  */
 private fun dashboardCardValue(
     card: DashboardCard,
     day: DailyMetric?,
     carriedDay: DailyMetric?,
+    vitalsDay: DailyMetric?,
     stress: Double?,
     fitnessAge: Double?,
     vitality: Double?,
@@ -2872,16 +3052,16 @@ private fun dashboardCardValue(
     fun withUnit(s: String): String =
         if (s == NO_DATA) NO_DATA else if (card.unit.isEmpty()) s else "$s ${card.unit}"
 
-    // The overnight vitals carry over from the last scored night; today's accruing totals do not.
+    // SpO₂ / Skin Temp / Sleep carry over from the last scored night; today's accruing totals do not.
     val vd = carriedDay ?: day
 
     return when (card) {
         DashboardCard.HRV ->
-            withUnit(vd?.avgHrv?.let { it.roundToInt().toString() } ?: NO_DATA)
+            withUnit((day?.avgHrv ?: vitalsDay?.avgHrv)?.let { it.roundToInt().toString() } ?: NO_DATA)
         DashboardCard.RESTING_HR ->
-            withUnit(vd?.restingHr?.toString() ?: NO_DATA)
+            withUnit((day?.restingHr ?: vitalsDay?.restingHr)?.toString() ?: NO_DATA)
         DashboardCard.RESPIRATORY ->
-            withUnit(vd?.respRateBpm?.let { String.format(Locale.US, "%.1f", it) } ?: NO_DATA)
+            withUnit((day?.respRateBpm ?: vitalsDay?.respRateBpm)?.let { String.format(Locale.US, "%.1f", it) } ?: NO_DATA)
         DashboardCard.BLOOD_OXYGEN ->
             vd?.spo2Pct?.let { String.format(Locale.US, "%.0f%%", it) } ?: NO_DATA
         DashboardCard.SKIN_TEMP ->
@@ -3607,6 +3787,22 @@ internal fun isCarryStale(priorDayKey: String, today: String = LocalDate.now().t
         ChronoUnit.DAYS.between(LocalDate.parse(priorDayKey), LocalDate.parse(today)) > CARRY_FRESHNESS_DAYS
     }.getOrDefault(false)
 
+/** #977 — HONEST Rest resolution for the selected day. Today's own scored Rest wins; otherwise, ONLY on
+ *  today, tail-fall-back to the last scored night — but ONLY when that night is within the carry-freshness
+ *  window ([isCarryStale] == false). A live 5.0 whose sleep never scores (no overnight gravity ⇒ no
+ *  `sleep_performance` point ever written) used to pin Rest to a weeks-old scored night while Charge kept
+ *  advancing; gating the tail-fallback lets the Rest ring fall through to its needs-a-tracked-night state
+ *  instead of freezing on a stale number. The legitimate morning carry of last night's Rest (before today
+ *  scores) is preserved unchanged. Pure + unit-testable. Mirrors iOS TodayView.freshRestScore. */
+internal fun freshRestScore(
+    todayValue: Double?, lastDay: String?, lastValue: Double?,
+    isTodaySelected: Boolean, today: String = LocalDate.now().toString(),
+): Double? {
+    if (todayValue != null) return todayValue
+    if (!isTodaySelected || lastDay == null || lastValue == null) return null
+    return if (isCarryStale(lastDay, today)) null else lastValue
+}
+
 /** The carried recovery caption stamp, keyed on that scored day's own date and its recency. Within the
  *  freshness cap it reads "Last night · <date>"; once the carried day is older than the cap (#779) it reads
  *  "Latest sleep · <date>" so a weeks-old import is never surfaced as "Last night". Shared by every carried
@@ -4192,6 +4388,47 @@ private suspend fun WhoopRepository.workoutsAllSources(from: Long, to: Long): Li
 // Mirrors the macOS TodayView.heartRateTrendSection. LineChart spaces points by index (no time axis),
 // so the buckets, being uniform 5-min means in time order, read as an even left-to-right day curve.
 
+/** The Today heart-rate card's visible window (the UX from PR #985, reimplemented). [TODAY] = the full
+ *  loaded day since the logical midnight — the unchanged default. The rest are rolling "last N hours"
+ *  ending now. VIEW-ONLY, the #829 zoom rule: a window only narrows which of the already-loaded 5-minute
+ *  buckets render — it never re-queries the DB and never changes the bucket resolution. (PR #985 proposed
+ *  re-reading shorter windows at finer buckets; that adds a DB round-trip per tap and a second read path
+ *  for detail that already has a home — the Deep Timeline re-reads down to raw seconds as you zoom.)
+ *  Because the loaded extent starts at midnight, a window clips to the day: early in the morning the wider
+ *  windows coincide with Today, which reads fine — both mean "everything so far". Only offered on the
+ *  CURRENT day: a past day has no "now", so it always shows the full calendar day, exactly as before. */
+internal enum class HrWindow(val label: String, val hours: Int) {
+    // Declaration order IS the pill order: Today (the whole loaded day) anchors the wide end, then
+    // strictly most → least hours. TODAY stays ordinal 0 so the rememberSaveable default is the full day.
+    TODAY("Today", 0),
+    H24("24h", 24), H12("12h", 12), H6("6h", 6), H3("3h", 3), H1("1h", 1);
+
+    /** Earliest bucket timestamp (unix seconds) this window renders, anchored at `now`. TODAY = no
+     *  narrowing. Anchoring at the wall clock (not the newest banked bucket) keeps the card honest: a
+     *  strap that hasn't offloaded for two hours shows "no heart rate in the last 1h", never a silently
+     *  re-anchored older hour — and the empty state keeps the pills, so it's not a dead end. */
+    fun cutoff(now: Long): Long = if (this == TODAY) Long.MIN_VALUE else now - hours * 3600L
+}
+
+/** The pure narrowing seam (locked by HrWindowTest): does a loaded bucket survive the window's cut?
+ *  The filter only ever drops OLD buckets, so the newest bucket always survives a non-empty cut and the
+ *  card's trailing "latest bpm" read-out is window-invariant. */
+internal fun hrWindowKeeps(bucketTs: Long, window: HrWindow, now: Long): Boolean =
+    bucketTs >= window.cutoff(now)
+
+/** The HR-window selector row, reusing the app's ONE SegmentedPillControl (house chrome, not the PR's
+ *  bespoke control). Shared by the empty and populated card branches so the pills stay put whether or
+ *  not the chosen window has data. */
+@Composable
+private fun HrWindowPills(selection: HrWindow, onSelect: (HrWindow) -> Unit) {
+    SegmentedPillControl(
+        items = HrWindow.entries.toList(),
+        selection = selection,
+        label = { it.label },
+        onSelect = onSelect,
+    )
+}
+
 @Composable
 private fun HeartRateTrendCard(
     viewModel: AppViewModel,
@@ -4210,12 +4447,20 @@ private fun HeartRateTrendCard(
     // thread alongside the buckets; each marker self-hides when its data is absent. (PR #285)
     var sleepToday by remember { mutableStateOf<SleepSession?>(null) }
     var workoutsToday by remember { mutableStateOf<List<WorkoutRow>>(emptyList()) }
+    // #985: the selected HR window. rememberSaveable ordinal so the choice survives rotation / process
+    // death and feels sticky like a preference; 0 = TODAY, the unchanged full-day default. Forced to
+    // TODAY on a past day (no "now" to anchor a rolling window — the pills don't render there either).
+    // VIEW-ONLY (see HrWindow): it narrows the rendered buckets below; the LaunchedEffect read is untouched.
+    var hrWindowOrdinal by rememberSaveable { mutableIntStateOf(0) }
+    val hrWindow = if (selectedDay == today) HrWindow.entries[hrWindowOrdinal] else HrWindow.TODAY
     // #829 Android parity - the Today HR pinch/drag zoom window (unix seconds), null = the full loaded
     // day. Mirrors iOS TodayView.hrZoomDomain: VIEW-ONLY (it narrows which of the already-loaded buckets
     // render, never re-queries the DB), keyed on the selected day so stepping days always opens at full
     // scale, while a same-day live reload keeps the window (fresh buckets only ever extend the loaded
     // extent, so an existing window stays valid). Reset by double-tap on the chart or the Reset link.
-    var hrZoom by remember(selectedDay) { mutableStateOf<LongRange?>(null) }
+    // Also keyed on the #985 window: changing the window re-frames the chart, so a pinch-zoom made
+    // inside the old frame resets with it rather than surviving as a stale sub-range.
+    var hrZoom by remember(selectedDay, hrWindowOrdinal) { mutableStateOf<LongRange?>(null) }
     // #605: a WHOOP-4.0 offload banks raw HR samples straight into the hr-sample store WITHOUT touching
     // any DailyMetric row, so a sync that only adds today's HR curve never changes `days`, and keying the
     // reload on `days` alone left this chart frozen on the pre-sync window until something unrelated
@@ -4260,21 +4505,38 @@ private fun HeartRateTrendCard(
         else -> selectedDay.format(DateTimeFormatter.ofPattern("d MMM", Locale.US))
     }
 
+    // #985 view-only narrowing (the #829 rule): the selected window filters the loaded 5-minute buckets,
+    // anchored at the wall clock when the inputs change. A live reload refreshes `buckets`, so the anchor
+    // tracks the sync cadence — plenty for a card whose buckets are 5 minutes wide.
+    val winBuckets = remember(buckets, hrWindow) {
+        val now = System.currentTimeMillis() / 1000
+        if (hrWindow == HrWindow.TODAY) buckets else buckets.filter { hrWindowKeeps(it.bucket, hrWindow, now) }
+    }
+
     // #863: a sparse/empty selected day used to `return` here and render NOTHING, which read as "the graph
     // froze". Show an explicit calibrating/empty card instead so the user knows the curve is still filling in
     // (a calibrating 4.0 banks HR slowly) rather than that the screen broke. We intentionally do NOT silently
     // swap in a different day's curve here (that day-swap reload behaviour was rejected in #605, see above);
     // the honest empty state is the parity-matched fix. Mirrors the iOS Today HR card's empty branch.
-    if (buckets.size < 2) {
+    // #985: the check reads the WINDOWED subset, and the pills stay visible in the empty state, so a
+    // too-narrow rolling window (say 1h with no recent offload) is never a dead end — the user widens it
+    // or steps back to Today, and the message says which window came up empty.
+    if (winBuckets.size < 2) {
         SectionHeader("Heart Rate", overline = selectedLabel)
         NoopCard {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Overline("Beats per minute")
+                if (selectedDay == today) {
+                    HrWindowPills(hrWindow) { hrWindowOrdinal = it.ordinal }
+                }
                 Text(
-                    if (selectedDay == today) {
-                        "Calibrating , no heart rate banked yet today. Your curve fills in as the strap offloads."
-                    } else {
-                        "No heart rate for this day. Step back to a day the strap was worn."
+                    when {
+                        selectedDay != today ->
+                            "No heart rate for this day. Step back to a day the strap was worn."
+                        hrWindow != HrWindow.TODAY && buckets.size >= 2 ->
+                            "No heart rate in the last ${hrWindow.label}. Try a wider window or Today."
+                        else ->
+                            "Calibrating , no heart rate banked yet today. Your curve fills in as the strap offloads."
                     },
                     style = NoopType.footnote,
                     color = Palette.textTertiary,
@@ -4284,7 +4546,9 @@ private fun HeartRateTrendCard(
         return
     }
 
-    val bpm = remember(buckets) { buckets.map { it.avgBpm } }
+    // #985: everything below (read-outs, zoom bounds, chart, footer) renders the WINDOWED subset — for
+    // TODAY that is the identical full-buckets list, so the default path is byte-for-byte the old one.
+    val bpm = remember(winBuckets) { winBuckets.map { it.avgBpm } }
     val latest = bpm.last().roundToInt()
     val min = bpm.min().roundToInt()
     val max = bpm.max().roundToInt()
@@ -4293,16 +4557,18 @@ private fun HeartRateTrendCard(
     // #829 - the RENDERED subset: the zoom window narrows which of the loaded buckets draw (the gesture
     // handler only commits windows keeping >= 2 buckets, and the full-buckets fallback covers a same-day
     // reload reshaping the data underneath an open window, so the curve always stays drawable). Bounds =
-    // the loaded day's bucket extent, the same full view the un-zoomed chart renders.
-    val zoomBounds = buckets.first().bucket..buckets.last().bucket
-    val visBuckets = remember(buckets, hrZoom) {
-        val sub = hrZoom?.let { w -> buckets.filter { it.bucket in w } } ?: buckets
-        if (sub.size >= 2) sub else buckets
+    // the SELECTED window's bucket extent (#985) — the same full view the un-zoomed chart renders — so a
+    // pinch-zoom pans within the chosen window, not out into buckets the window has hidden.
+    val zoomBounds = winBuckets.first().bucket..winBuckets.last().bucket
+    val visBuckets = remember(winBuckets, hrZoom) {
+        val sub = hrZoom?.let { w -> winBuckets.filter { it.bucket in w } } ?: winBuckets
+        if (sub.size >= 2) sub else winBuckets
     }
     val visBpm = remember(visBuckets) { visBuckets.map { it.avgBpm } }
     // The left y-rail tracks the RENDERED window (LineChart normalises to what it draws, the Deep
     // Timeline idiom), so a zoomed curve keeps honest max/avg/min beside it; the footer Min/Avg/Max row
-    // below stays the full-day read, mirroring the iOS footer.
+    // below reads the whole SELECTED window (#985) — the full day for Today, or the rolling last-N-hours
+    // span — so it matches the subtitle and stays stable while you pinch around within that window.
     val visMax = visBpm.max().roundToInt()
     val visAvg = visBpm.average().roundToInt()
     val visMin = visBpm.min().roundToInt()
@@ -4314,10 +4580,13 @@ private fun HeartRateTrendCard(
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Overline("Beats per minute")
-                    val subtitle = if (selectedDay == today) {
-                        "5-minute average | since midnight"
-                    } else {
-                        "5-minute average | selected day"
+                    // #985: the buckets stay the same 5-minute means whatever the window (view-only
+                    // narrowing, no re-read), so the resolution half of the label never changes — only
+                    // the span half tells the truth about what's on screen.
+                    val subtitle = when {
+                        selectedDay != today -> "5-minute average | selected day"
+                        hrWindow == HrWindow.TODAY -> "5-minute average | since midnight"
+                        else -> "5-minute average | last ${hrWindow.label}"
                     }
                     Text(
                         subtitle,
@@ -4326,6 +4595,11 @@ private fun HeartRateTrendCard(
                     )
                 }
                 Text("$latest bpm", style = NoopType.chartValueLarge, color = Palette.metricRose)
+            }
+            // #985: the window selector, current day only — Today (since midnight, the default) or a
+            // rolling last-N-hours cut of the same loaded buckets. A past day has no "now" → no selector.
+            if (selectedDay == today) {
+                HrWindowPills(hrWindow) { hrWindowOrdinal = it.ordinal }
             }
             // Chart with a max/avg/min Y-axis label column on the left and an HH:mm X-axis row below.
             // The line spaces points by index, but the X labels read each bucket's REAL timestamp in
@@ -4346,7 +4620,8 @@ private fun HeartRateTrendCard(
                 // glyphs) overlaid on top, markers are positioned by mapping each event's wall-clock
                 // time onto the line's index spacing, so they sit on the same curve. (PR #285)
                 // #829 - renders the zoom window's subset, with the pinch/pan/double-tap transform
-                // detector attached (keyed on `buckets` so its captured bounds track a reload).
+                // detector attached (keyed on the #985-windowed buckets so its captured bounds track
+                // both a reload and a window change — the pinch operates INSIDE the selected window).
                 OverviewHRChart(
                     buckets = visBuckets,
                     bpm = visBpm,
@@ -4358,9 +4633,9 @@ private fun HeartRateTrendCard(
                     modifier = Modifier
                         .weight(1f)
                         .height(Metrics.chartHeight)
-                        .pointerInput(buckets) {
+                        .pointerInput(winBuckets) {
                             hrChartTransformGestures(
-                                buckets = buckets,
+                                buckets = winBuckets,
                                 bounds = zoomBounds,
                                 window = { hrZoom },
                                 onWindow = { hrZoom = it },

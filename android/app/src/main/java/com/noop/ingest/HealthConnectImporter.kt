@@ -26,6 +26,7 @@ import com.noop.data.AppleDaily
 import com.noop.data.DailyMetric
 import com.noop.data.ImportSummary
 import com.noop.data.MetricSeriesRow
+import com.noop.data.SleepSession
 import com.noop.data.WhoopRepository
 import com.noop.data.WorkoutRow
 import java.time.Instant
@@ -178,6 +179,11 @@ object HealthConnectImporter {
         // session can be credited with the calories burned inside its window (#117). Garmin/Fit write
         // ActiveCaloriesBurned as interval records; ExerciseSessionRecord itself carries no energy.
         val activeKcalRecords = ArrayList<Triple<Long, Long, Double>>()
+        // #983: HC-only users (no strap) had NO sleep at all — the importer collapsed each
+        // SleepSessionRecord to a per-day minute total and never wrote a SleepSession row, so the Sleep
+        // screen (which reads repo.sleepSessions) fell to its empty state. Keep each night's bounds +
+        // per-stage minutes here, paired with its wake day for the coveredDays gate at write-out.
+        val hcSleepSessions = ArrayList<Pair<String, SleepSession>>()
 
         try {
             // --- Steps ---
@@ -237,6 +243,16 @@ object HealthConnectImporter {
                 else (r.endTime.epochSecond - r.startTime.epochSecond) / 60.0
                 b.sleepMin += totalMin
                 b.hasSleep = true
+                // #983: also keep the session itself so the Sleep screen has a night to show. startTs/endTs
+                // are epoch SECONDS (what repo.sleepSessions queries). Per-stage minutes -> stagesJSON in the
+                // same shape the WHOOP CSV / Xiaomi importers use; a generic-SLEEPING-only night has no
+                // sub-stage breakdown so stagesJSON is null and the row rides on totalSleepMin.
+                hcSleepSessions.add(day to SleepSession(
+                    deviceId = WHOOP,
+                    startTs = r.startTime.epochSecond,
+                    endTs = r.endTime.epochSecond,
+                    stagesJSON = hcStagesJson(r),
+                ))
             }
             // --- SpO2 (%) -> per-day average ---
             readAll(client, OxygenSaturationRecord::class, filter, selfPackage) { r ->
@@ -495,6 +511,13 @@ object HealthConnectImporter {
                 repo.upsertDevice(WHOOP, name = "WHOOP")
                 repo.upsertDailyMetrics(dailyRows)
             }
+            // #983: write the collected sleep sessions under WHOOP, but ONLY for days the strap does not
+            // already cover (same guard as the daily rows) so a real strap night is never shadowed.
+            val sleepRows = hcSleepSessions.filter { it.first !in coveredDays }.map { it.second }
+            if (sleepRows.isNotEmpty()) {
+                repo.upsertDevice(WHOOP, name = "WHOOP")
+                repo.upsertSleepSessions(sleepRows)
+            }
             if (workouts.isNotEmpty()) {
                 repo.upsertWorkouts(workouts)
             }
@@ -668,6 +691,32 @@ object HealthConnectImporter {
             }
         }
         return min
+    }
+
+    /** Build the `[{stage,min},...]` stagesJSON (same shape as the WHOOP CSV / Xiaomi importers) from a
+     *  Health Connect sleep session's per-stage segments (#983). Returns null when the session carries no
+     *  sub-stage breakdown (e.g. a generic STAGE_TYPE_SLEEPING-only record), so the night rides on its
+     *  total minutes alone. */
+    private fun hcStagesJson(r: SleepSessionRecord): String? {
+        if (r.stages.isEmpty()) return null
+        var light = 0.0; var deep = 0.0; var rem = 0.0; var awake = 0.0
+        for (s in r.stages) {
+            val min = (s.endTime.epochSecond - s.startTime.epochSecond) / 60.0
+            when (s.stage) {
+                SleepSessionRecord.STAGE_TYPE_LIGHT -> light += min
+                SleepSessionRecord.STAGE_TYPE_DEEP -> deep += min
+                SleepSessionRecord.STAGE_TYPE_REM -> rem += min
+                SleepSessionRecord.STAGE_TYPE_AWAKE -> awake += min
+                else -> {}   // SLEEPING (generic) / UNKNOWN: counted in totalSleepMin, no sub-stage split
+            }
+        }
+        if (light == 0.0 && deep == 0.0 && rem == 0.0 && awake == 0.0) return null
+        val arr = org.json.JSONArray()
+        fun seg(stage: String, min: Double) {
+            if (min > 0.0) arr.put(org.json.JSONObject().put("stage", stage).put("min", min))
+        }
+        seg("light", light); seg("deep", deep); seg("rem", rem); seg("awake", awake)
+        return if (arr.length() == 0) null else arr.toString()
     }
 
     /** SleepSessionRecord stage ints that count as "asleep". */

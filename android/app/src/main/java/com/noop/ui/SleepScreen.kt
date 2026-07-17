@@ -163,8 +163,14 @@ fun SleepScreen(
     LaunchedEffect(days) {
         sleeps = runCatching {
             val now = System.currentTimeMillis() / 1000L
-            val imported = vm.repo.sleepSessions("my-whoop", 0L, now)
-            val computed = vm.repo.sleepSessions(vm.repo.computedDeviceId("my-whoop"), 0L, now)
+            // Read the ACTIVE-strap ∪ canonical "my-whoop" union (#814/#1008), not the canonical id
+            // alone: after a strap remove+re-add live nights land under the fresh "whoop-<uuid>" id, so
+            // a canonical-only read left this screen STUCK on the last pre-re-add night while every
+            // union-joined surface moved on (the #1014/#1009 stuck-sleep divergence, in the OTHER
+            // direction). Exact-duplicate (startTs, endTs) blocks recorded under both ids are dropped;
+            // naps/split blocks survive. Single-device installs collapse to one id, byte-identical.
+            val imported = vm.repo.sleepSessionsUnion(vm.activeStrapId, 0L, now)
+            val computed = vm.repo.computedSleepSessionsUnion(vm.activeStrapId, 0L, now)
             // Key by the LOCAL wake-day (#304), matching WhoopRepository.mergeSleep — a UTC key
             // mis-attributed a UTC+ user's early-morning wake to yesterday. REUSE the existing
             // dayString(ts, offsetSec) overload; do not add a new one (it clashes on the JVM).
@@ -200,7 +206,9 @@ fun SleepScreen(
     // alongside `sleeps`. Mirrors iOS SleepView.habitualMidsleepSec. (#547)
     var habitualMidsleep by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(days) {
-        habitualMidsleep = runCatching { vm.repo.habitualMidsleepSec("my-whoop") }.getOrNull()
+        // Thread the ACTIVE strap id so the learner unions active + canonical nights (#814/#1008);
+        // habitualMidsleepSec resolves the canonical "my-whoop" sibling internally either way.
+        habitualMidsleep = runCatching { vm.repo.habitualMidsleepSec(vm.activeStrapId) }.getOrNull()
     }
 
     // Persisted per-epoch MOTION keyed by each session's detected startTs (#407). Loaded alongside
@@ -371,11 +379,13 @@ fun SleepScreen(
                         sleepUndo = null
                         scope.launch {
                             vm.undoDeleteSleepSession(deleted)
-                            // Re-read so the restored night reappears in the ◀/▶ browse.
+                            // Re-read so the restored night reappears in the ◀/▶ browse. Same
+                            // active∪canonical union as the main loader (#814/#1008), so the undo
+                            // reload can't snap the browse back to a canonical-only night set.
                             sleeps = runCatching {
                                 val now = System.currentTimeMillis() / 1000L
-                                vm.repo.sleepSessions("my-whoop", 0L, now) +
-                                    vm.repo.sleepSessions(vm.repo.computedDeviceId("my-whoop"), 0L, now)
+                                vm.repo.sleepSessionsUnion(vm.activeStrapId, 0L, now) +
+                                    vm.repo.computedSleepSessionsUnion(vm.activeStrapId, 0L, now)
                             }.getOrDefault(sleeps)
                         }
                     },
@@ -487,8 +497,10 @@ fun SleepScreen(
                         vm.addManualNap(startTs, endTs)
                         sleeps = runCatching {
                             val now = System.currentTimeMillis() / 1000L
-                            val imported = vm.repo.sleepSessions("my-whoop", 0L, now)
-                            val computed = vm.repo.sleepSessions(vm.repo.computedDeviceId("my-whoop"), 0L, now)
+                            // Same active∪canonical union as the main loader (#814/#1008), so the
+                            // post-nap reload can't snap the browse back to a canonical-only night set.
+                            val imported = vm.repo.sleepSessionsUnion(vm.activeStrapId, 0L, now)
+                            val computed = vm.repo.computedSleepSessionsUnion(vm.activeStrapId, 0L, now)
                             fun localEndDay(ts: Long): String {
                                 val offsetSec = (java.util.TimeZone.getDefault().getOffset(ts * 1000) / 1000).toLong()
                                 return AnalyticsEngine.dayString(ts, offsetSec)

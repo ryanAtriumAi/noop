@@ -505,6 +505,16 @@ struct TodayView: View {
             isCalibrating: recoveryCalibration != nil)
     }
 
+    /// The recovery-INDEPENDENT prior-day vitals carry for the recovery-VITALS card only (HRV / RHR /
+    /// respiratory). Unlike `lastScoredRecoveryDay` (gated on the prior night's recovery), this carries the
+    /// last night that recorded any vital, so a night with real HRV/RHR but a null recovery still feeds the
+    /// vitals — it is read PER-FIELD, today-first, so today's own value always wins. Only on today (a
+    /// navigated past day shows its own row verbatim); today's own key bounds it so it can't echo today.
+    private var lastVitalsDay: DailyMetric? {
+        guard selectedDayOffset == 0 else { return nil }
+        return Repository.lastVitalsDay(days: repo.days, todayKey: displayDay?.day ?? selectedDayKey)
+    }
+
     /// Pure carry-over selector behind `lastScoredRecoveryDay`, extracted so the gate + selection can be
     /// unit-tested without a live view (mirrors `buildingHintCopy` / the Android `lastScoredRecoveryDay`).
     /// Returns the freshest scored prior row to carry over, or nil. `days` is oldest→newest; the chosen
@@ -573,6 +583,21 @@ struct TodayView: View {
               let today = dayKeyParser.date(from: todayKey) else { return false }
         let days = Calendar.current.dateComponents([.day], from: prior, to: today).day ?? 0
         return days > carryFreshnessDays
+    }
+
+    /// #977 — HONEST Rest resolution for the selected day. Today's own scored Rest wins; otherwise, ONLY on
+    /// today, tail-fall-back to the last scored night — but ONLY when that night is within the carry-freshness
+    /// window (`isCarryStale == false`). A live 5.0 whose sleep never scores (no overnight gravity ⇒ no
+    /// `sleep_performance` point ever written) used to pin Rest to a weeks-old scored night while Charge kept
+    /// advancing; gating the tail-fallback lets the Rest hero fall through to its No-Data/calibrating state
+    /// instead of freezing on a stale number. The legitimate morning carry of last night's Rest (before today
+    /// scores) is preserved unchanged. Pure + unit-testable. Mirror EXACTLY in Kotlin.
+    static func freshRestScore(todayValue: Double?, lastDay: String?, lastValue: Double?,
+                               isTodaySelected: Bool, todayKey: String) -> Double? {
+        if let v = todayValue { return v }
+        guard isTodaySelected, let lastDay, let lastValue,
+              !isCarryStale(priorDayKey: lastDay, todayKey: todayKey) else { return nil }
+        return lastValue
     }
 
     /// The carried recovery caption stamp, keyed on that scored day's own date and its recency. Within the
@@ -1303,6 +1328,11 @@ struct TodayView: View {
         // Reload when the data refreshes OR the selected day changes, the HR trend and Rest score are
         // day-scoped, so navigating must re-fetch them for the newly selected window.
         .task(id: TodayLoadKey(seq: repo.refreshSeq, offset: selectedDayOffset)) { await loadAll() }
+        // #989: hydration writes don't bump refreshSeq, so the card needs its own triggers, a logged /
+        // edited / deleted drink (hydrationSeq) and the Settings feature toggle both re-read just the two
+        // hydration fields. Cheap (one metricSeries row), never re-runs the heavy loads.
+        .task(id: repo.hydrationSeq) { await reloadHydration() }
+        .onChangeCompat(of: hydrationEnabled) { _ in Task { await reloadHydration() } }
         // #755: NO per-edge safety net here, on purpose. A deep offload segments into many slices that each
         // flip `backfilling` false→true, so re-running the heavy history-wide reads on that edge would re-fire
         // them dozens of times mid-offload and re-create the very write-contention this fix removes. The
@@ -2293,10 +2323,20 @@ struct TodayView: View {
     /// (e.g. a BLE-only night with no SpO₂), and today's own value always wins the instant it lands.
     @ViewBuilder
     private func recoveryVitalsCard(_ d: DailyMetric?) -> some View {
-        // The row the vitals read from: today's own row when it carries recovery, else the carried-over
-        // prior scored day (only when we're carrying, `lastScoredRecoveryDay` is gated to that case).
-        let carried = lastScoredRecoveryDay
-        let vd = carried ?? d
+        // PER-FIELD, today-first carry (not a whole-row swap): each vital reads today's own value, else
+        // falls back to the last night that recorded THAT vital (`lastVitalsDay`, recovery-INDEPENDENT — a
+        // night with real HRV/RHR but a null recovery is a valid source, which the old `lastScoredRecoveryDay`
+        // row-swap skipped). Today's own value always wins the instant it lands.
+        let vd = lastVitalsDay
+        let hrv = d?.avgHrv ?? vd?.avgHrv
+        let rhr = d?.restingHr ?? vd?.restingHr
+        let resp = d?.respRateBpm ?? vd?.respRateBpm
+        // The provenance row a shown vital fell back to (nil when every shown vital is today's own): stamps
+        // that row's own date, so the footnote can't claim "Last night" for a value that IS today's.
+        let carriedFromHrv = d?.avgHrv == nil && vd?.avgHrv != nil
+        let carriedFromRhr = d?.restingHr == nil && vd?.restingHr != nil
+        let carriedFromResp = d?.respRateBpm == nil && vd?.respRateBpm != nil
+        let provenance: DailyMetric? = (carriedFromHrv || carriedFromRhr || carriedFromResp) ? vd : nil
         NoopCard(tint: StrandPalette.chargeColor) {
             VStack(spacing: 0) {
                 // DEBUG promo harness: pin HRV / Resting HR to the active frame's values. No-op otherwise.
@@ -2308,24 +2348,24 @@ struct TodayView: View {
                 let demoRhr: String? = nil
                 #endif
                 metricRow(icon: "waveform.path.ecg", label: "HRV",
-                          value: demoHrv ?? (vd?.avgHrv.map { "\(Int($0.rounded()))" } ?? "—"), unit: "ms",
+                          value: demoHrv ?? (hrv.map { "\(Int($0.rounded()))" } ?? "—"), unit: "ms",
                           tint: StrandPalette.metricCyan)
                 Divider().overlay(StrandPalette.hairline)
                 metricRow(icon: "heart.fill", label: "Resting HR",
-                          value: demoRhr ?? (vd?.restingHr.map { "\($0)" } ?? "—"), unit: "bpm",
+                          value: demoRhr ?? (rhr.map { "\($0)" } ?? "—"), unit: "bpm",
                           tint: StrandPalette.metricRose)
                 Divider().overlay(StrandPalette.hairline)
                 metricRow(icon: "lungs.fill", label: "Respiratory",
-                          // Carried day uses its OWN respiratory; a non-carrying today keeps the
-                          // sparkline-tail fallback the tile uses so a sparse-but-recent value still reads.
-                          value: vd?.respRateBpm.map { String(format: "%.1f", $0) }
-                              ?? (carried == nil ? latestString("resp_rate", decimals: 1) : "—"),
+                          // Today's own respiratory, else the carried night's; a non-carrying today keeps the
+                          // sparkline-tail fallback so a sparse-but-recent value still reads.
+                          value: resp.map { String(format: "%.1f", $0) }
+                              ?? (vd == nil ? latestString("resp_rate", decimals: 1) : "—"),
                           unit: "rpm",
                           tint: StrandPalette.accent)
-                // ONE provenance footnote when these are carried prior-day vitals (not today's), matching
-                // the carried Charge ring's "Last night · <date>" stamp, so the whole recovery side is
-                // consistently labelled as a prior read rather than silently passing yesterday off as today.
-                if let prior = carried {
+                // ONE provenance footnote when a shown vital is a carried prior-day read (not today's),
+                // stamped with THAT row's date via the shared caption (which relabels a weeks-old carry to
+                // "Latest sleep", #779), so a prior read is never silently passed off as today.
+                if let prior = provenance {
                     HStack(spacing: 4) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 10, weight: .semibold))
@@ -3580,6 +3620,9 @@ struct TodayView: View {
         // reload identical data. If the cache is somehow absent (defensive), fall through and reload.
         if repo.todayHistoryWideLoadedSeq == currentSeq, let cached = repo.todayHistoryWideCache {
             restoreHistoryWide(cached)
+            // #989: hydration is excluded from the snapshot (a drink logged since would be stale), so a
+            // restore re-reads it live, one cheap row.
+            await reloadHydration()
             loadedHistoryWideOnce = true
             announceNewDaysIfNeeded()
             return
@@ -3689,13 +3732,7 @@ struct TodayView: View {
         vitalityToday = (await vitalitySeriesA).last?.value
         // Hydration card (opt-in): today's stored total + the sex/Effort goal. Only loaded when the
         // feature is on, so a disabled feature does zero work and the card stays hidden.
-        if hydrationEnabled {
-            hydrationTotalML = await repo.hydrationTotal(day: Repository.localDayKey(Date()))
-            hydrationGoalML = repo.hydrationGoalML(profileSex: profile.sex)
-        } else {
-            hydrationTotalML = nil
-            hydrationGoalML = nil
-        }
+        await reloadHydration()
         if let store = await repo.storeHandle() {
             let farFuture = Int(Date.distantFuture.timeIntervalSince1970)
             xiaomiSleeps = ((try? await store.sleepSessions(deviceId: "xiaomi-band", from: 0, to: farFuture, limit: 4000))?.count) ?? 0
@@ -3718,9 +3755,7 @@ struct TodayView: View {
             xiaomiSleeps: xiaomiSleeps,
             stressToday: stressToday,
             fitnessAgeToday: fitnessAgeToday,
-            vitalityToday: vitalityToday,
-            hydrationTotalML: hydrationTotalML,
-            hydrationGoalML: hydrationGoalML
+            vitalityToday: vitalityToday
         )
     }
 
@@ -3739,8 +3774,21 @@ struct TodayView: View {
         stressToday = c.stressToday
         fitnessAgeToday = c.fitnessAgeToday
         vitalityToday = c.vitalityToday
-        hydrationTotalML = c.hydrationTotalML
-        hydrationGoalML = c.hydrationGoalML
+        // Hydration is deliberately NOT part of the snapshot (#989): logging a drink never bumps
+        // refreshSeq, so a restored total could be stale. It is re-read live instead (see loadAll).
+    }
+
+    /// #989: today's hydration total + goal, re-read wherever staleness could show: the history-wide load,
+    /// the same-seq cache restore, a hydration mutation (`repo.hydrationSeq`), and the feature toggle.
+    /// One metricSeries row + a UserDefaults read, cheap enough to run on every pass.
+    private func reloadHydration() async {
+        if hydrationEnabled {
+            hydrationTotalML = await repo.hydrationTotal(day: Repository.localDayKey(Date()))
+            hydrationGoalML = repo.hydrationGoalML(profileSex: profile.sex)
+        } else {
+            hydrationTotalML = nil
+            hydrationGoalML = nil
+        }
     }
 
     /// #932: restore the day-scoped outputs from a same-(seq, day) cache on a re-mount, so the selected day
@@ -3839,8 +3887,15 @@ struct TodayView: View {
         // the score reads instead, windowed to the trailing 14 calendar days like every other spark.
         let restSparkLocal = trailingWindow(restSeries, days: 14).map { $0.value }
         sparks["sleep_performance"] = restSparkLocal
-        // The selected day's Rest, falling back to the series tail only when today itself is selected,         // a navigated past day with no Rest row shows ", " rather than borrowing the newest value.
-        let restScoreLocal = restByDay[selectedDayKey] ?? (selectedDayOffset == 0 ? restSeries.last?.value : nil)
+        // The selected day's Rest, falling back to the series tail only when today itself is selected (a
+        // navigated past day with no Rest row shows ", " rather than borrowing the newest value) AND that
+        // tail night is still fresh. #977: a live 5.0 whose sleep never scores used to pin Rest to the
+        // weeks-old series tail forever; gate the tail-fallback on freshness so a stale tail falls through
+        // to the No-Data state instead of freezing.
+        let restScoreLocal = Self.freshRestScore(
+            todayValue: restByDay[selectedDayKey], lastDay: restSeries.last?.day,
+            lastValue: restSeries.last?.value, isTodaySelected: selectedDayOffset == 0,
+            todayKey: selectedDayKey)
         restScore = restScoreLocal
 
         // Component 4, resolve the REAL per-day merge winner for the selected day's derived scores. The
@@ -4254,8 +4309,8 @@ struct TodayHistoryWideCache {
     let stressToday: Double?
     let fitnessAgeToday: Double?
     let vitalityToday: Double?
-    let hydrationTotalML: Double?
-    let hydrationGoalML: Int?
+    // Hydration total/goal intentionally absent (#989): mutations don't bump refreshSeq, so a cached
+    // value could restore stale. TodayView re-reads hydration live on restore instead.
 }
 
 /// #849/#932: an in-memory snapshot of everything `loadDayScoped()` computes for ONE viewed day: the Rest
