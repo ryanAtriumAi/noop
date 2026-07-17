@@ -1125,7 +1125,21 @@ final class IntelligenceEngine: ObservableObject {
         let cachedSleepKept = cachedSleep.filter { s in
             !skipWindows.contains { s.startTs < $0.end && $0.start < s.endTs }   // time-overlap test
         }
+        // Snapshot what was stored BEFORE the upsert: the "Sleep detected" announcement below must
+        // distinguish a genuinely new night (first pass to bank it) from the same night re-banked
+        // by the 15-minute rescore tick with a drifted onset.
+        let preexistingSleep = cachedSleepKept.isEmpty ? [] :
+            ((try? await store.sleepSessions(deviceId: computedId, from: windowStart, to: now,
+                                             limit: 4_000)) ?? [])
         if !cachedSleepKept.isEmpty { _ = try? await store.upsertSleepSessions(cachedSleepKept, deviceId: computedId) }
+        // WHOOP-style auto-detect surfacing: announce a newly banked, freshly-ended session so a
+        // background-sync detection reaches the user without the app being opened. The pure policy
+        // (fresh-wake window, overlap-newness, once-per-session ring) is test-pinned in
+        // StrandAnalytics; edited/dismissed windows were already filtered out of `cachedSleepKept`
+        // above, so a corrected or deleted night can never re-announce itself.
+        SleepDetectedNotifier.onSleepBanked(
+            banked: cachedSleepKept.map { (startTs: $0.startTs, endTs: $0.endTs) },
+            preexisting: preexistingSleep.map { (startTs: $0.startTs, endTs: $0.endTs) })
         // ── Persist per-epoch motion (H8) beside each kept session's stagesJSON ──────────────────────────
         // The sleepSession rows exist now (just upserted), so the targeted motion UPDATE lands. Persist ONLY
         // for the sessions actually kept (not edited/dismissed), keyed by the detected start `analyzeDay`

@@ -55,6 +55,7 @@ struct AutomationsView: View {
             illnessCard
             healthInsightsCard
             batteryCard
+            sleepDetectedCard
         }
     }
 
@@ -366,6 +367,21 @@ struct AutomationsView: View {
                       isOn: $behavior.batteryAlerts)
                 .onChangeCompat(of: behavior.batteryAlerts) { on in
                     if on { BatteryNotifier.requestAuthorization() }
+                }
+        }
+    }
+
+    // MARK: - Sleep detected alerts
+
+    private var sleepDetectedCard: some View {
+        Section2(icon: "bed.double.fill", title: String(localized: "Sleep detected alerts"),
+                 blurb: String(localized: "When a sync banks a night or nap it auto-detected, you get a notification shortly after you wake, no need to open the app. Everything stays on \(Platform.deviceNounPhrase)."),
+                 active: behavior.sleepDetectedAlerts) {
+            ToggleRow(label: String(localized: "Announce detected sleep"),
+                      help: String(localized: "Fires once per detected session, only for a night or nap that ended in the last few hours. A sleep you edited or deleted is never re-announced."),
+                      isOn: $behavior.sleepDetectedAlerts)
+                .onChangeCompat(of: behavior.sleepDetectedAlerts) { on in
+                    if on { SleepDetectedNotifier.requestAuthorization() }
                 }
         }
     }

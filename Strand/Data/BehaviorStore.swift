@@ -51,6 +51,12 @@ final class BehaviorStore: ObservableObject {
     /// Notify on low strap battery (≤15%) and full charge (100%). Default ON (#368).
     @Published var batteryAlerts: Bool { didSet { d.set(batteryAlerts, forKey: K.batteryAlerts) } }
 
+    // MARK: Sleep detected alerts
+    /// Announce a newly auto-detected night or nap shortly after wake (WHOOP parity). Default ON.
+    /// Key MATCHES `SleepDetectedNotifier.enabledKey` (one source of truth, two readers — the
+    /// notifier fires from the engine's banking seam, which doesn't see this store).
+    @Published var sleepDetectedAlerts: Bool { didSet { d.set(sleepDetectedAlerts, forKey: K.sleepDetected) } }
+
     private let d = UserDefaults.standard
     private enum K {
         static let dtAction = "behavior.doubleTapAction"
@@ -73,6 +79,7 @@ final class BehaviorStore: ObservableObject {
         // preserved should a real light-sleep watcher ever land.
         static let illness = "behavior.illnessWatch"
         static let batteryAlerts = "behavior.batteryAlerts"
+        static let sleepDetected = "behavior.sleepDetectedAlerts"
     }
 
     init() {
@@ -94,6 +101,7 @@ final class BehaviorStore: ObservableObject {
         smartAlarmWeekdays = Set((d.array(forKey: K.alarmWeekdays) as? [Int] ?? []).filter { (1...7).contains($0) })
         illnessWatch = d.object(forKey: K.illness) as? Bool ?? false
         batteryAlerts = d.object(forKey: K.batteryAlerts) as? Bool ?? true
+        sleepDetectedAlerts = d.object(forKey: K.sleepDetected) as? Bool ?? true
     }
 
     // MARK: Charge baseline recalibration
